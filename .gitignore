@@ -1,0 +1,19 @@
+# Secrets. Never commit this.
+.env
+
+__pycache__/
+*.pyc
+.venv/
+
+# Downloaded price data. Re-downloadable, and it is large.
+data/cache/*.csv
+
+# Local backtest output.
+reports/*.html
+reports/*.csv
+reports/signals_*.md
+reports/_*.png
+
+# NOTE: state/ and site/ are deliberately NOT ignored. The agent's history and
+# the published dashboard need to be committed so the record survives and the
+# website updates.

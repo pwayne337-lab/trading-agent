@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Example dashboard (sample data, not yours)</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1:#fcfcfb; --plane:#f9f9f7;
+    --text-primary:#0b0b0b; --text-secondary:#52514e; --muted:#898781;
+    --gridline:#e1e0d9; --border:rgba(11,11,11,0.10);
+    --series-1:#2a78d6; --good:#006300; --critical:#d03b3b; --warning:#a86a00;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --surface-1:#1a1a19; --plane:#0d0d0d;
+      --text-primary:#fff; --text-secondary:#c3c2b7; --muted:#898781;
+      --gridline:#2c2c2a; --border:rgba(255,255,255,0.10);
+      --series-1:#3987e5; --good:#0ca30c; --critical:#e06060; --warning:#fab219;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--plane);color:var(--text-primary);
+    font:15px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-text-size-adjust:100%}
+  .wrap{max-width:900px;margin:0 auto;padding:20px 16px 56px}
+  header{display:flex;flex-wrap:wrap;gap:8px;align-items:baseline;
+    justify-content:space-between;margin-bottom:16px}
+  h1{font-size:20px;margin:0;letter-spacing:-0.01em}
+  .mode{font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+    border:1px solid var(--border);border-radius:999px;padding:3px 10px;
+    color:var(--text-secondary)}
+  .mode.live{color:var(--critical);border-color:var(--critical)}
+  h2{font-size:14px;margin:26px 0 9px;color:var(--text-secondary);font-weight:600}
+  .banner{border-radius:9px;padding:11px 14px;margin-bottom:14px;font-size:13.5px;
+    border:1px solid var(--border);background:var(--surface-1)}
+  .banner.critical{border-left:3px solid var(--critical)}
+  .banner.warning{border-left:3px solid var(--warning)}
+  .tiles{display:grid;gap:9px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+  .tile{background:var(--surface-1);border:1px solid var(--border);
+    border-radius:10px;padding:12px 14px}
+  .tl{color:var(--text-secondary);font-size:11.5px}
+  .tv{font-size:22px;font-weight:600;margin:3px 0 2px;letter-spacing:-0.02em}
+  .ts{color:var(--muted);font-size:11px}
+  .tile.good .tv{color:var(--good)} .tile.bad .tv,.tile.critical .tv{color:var(--critical)}
+  .tile.warning .tv{color:var(--warning)}
+  .card{background:var(--surface-1);border:1px solid var(--border);
+    border-radius:10px;padding:14px;position:relative}
+  .card.empty{color:var(--muted);font-size:13.5px}
+  .chart{width:100%;height:230px;display:block}
+  .tick{fill:var(--muted);font-size:11px;font-variant-numeric:tabular-nums}
+  .tip{position:absolute;pointer-events:none;opacity:0;background:var(--surface-1);
+    border:1px solid var(--border);border-radius:8px;padding:6px 9px;font-size:12px;
+    box-shadow:0 4px 14px rgba(0,0,0,.14);transition:opacity .1s;white-space:nowrap}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th{text-align:left;color:var(--text-secondary);font-weight:500;
+    border-bottom:1px solid var(--border);padding:7px 8px;white-space:nowrap}
+  td{padding:8px;border-bottom:1px solid var(--gridline)}
+  tr:last-child td{border-bottom:none}
+  .n{text-align:right;font-variant-numeric:tabular-nums}
+  .pos{color:var(--good)} .neg{color:var(--critical)}
+  .scroll{overflow-x:auto}
+  .events{list-style:none;margin:0;padding:0}
+  .ev{padding:9px 0;border-bottom:1px solid var(--gridline);font-size:13.5px}
+  .ev:last-child{border-bottom:none}
+  .ev.quiet{color:var(--muted)}
+  .tag{display:inline-block;font-size:10.5px;text-transform:uppercase;
+    letter-spacing:.06em;padding:2px 7px;border-radius:999px;margin-right:7px;
+    border:1px solid var(--border);color:var(--text-secondary)}
+  .ev.ok .tag{color:var(--good);border-color:var(--good)}
+  .ev.block .tag{color:var(--critical);border-color:var(--critical)}
+  .brief p{margin:0 0 10px} .brief p:last-child{margin:0}
+  footer{margin-top:30px;color:var(--muted);font-size:11.5px;line-height:1.6}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Example dashboard (sample data, not yours)</h1>
+    <span class="mode ">PAPER</span>
+  </header>
+
+  
+
+  <div class="tiles"><div class="tile "><div class="tl">Account equity</div><div class="tv">$10,237.32</div><div class="ts">paper account &middot; 40 run(s) recorded</div></div><div class="tile bad"><div class="tl">Today</div><div class="tv">-0.97%</div><div class="ts">since the previous run</div></div><div class="tile good"><div class="tl">Since start</div><div class="tv">+2.26%</div><div class="ts">of tracking</div></div><div class="tile good"><div class="tl">Open positions</div><div class="tv">3</div><div class="ts">open P&amp;L $+119.37</div></div><div class="tile "><div class="tl">Cash</div><div class="tv">$4,299.68</div><div class="ts">uninvested</div></div><div class="tile good"><div class="tl">Last run</div><div class="tv">0 min ago</div><div class="ts">1 order(s), 2 blocked</div></div></div>
+
+  <h2>Account equity</h2>
+  <div class="card" id="c1"><svg viewBox="0 0 920 280" class="chart" role="img" preserveAspectRatio="none">
+  <line x1="62" y1="250.0" x2="904" y2="250.0" stroke="var(--gridline)" stroke-width="1"/><line x1="62" y1="191.5" x2="904" y2="191.5" stroke="var(--gridline)" stroke-width="1"/><line x1="62" y1="133.0" x2="904" y2="133.0" stroke="var(--gridline)" stroke-width="1"/><line x1="62" y1="74.5" x2="904" y2="74.5" stroke="var(--gridline)" stroke-width="1"/><line x1="62" y1="16.0" x2="904" y2="16.0" stroke="var(--gridline)" stroke-width="1"/>
+  
+  <polyline points="62.00,233.86 83.59,216.94 105.18,227.80 126.77,214.22 148.36,183.31 169.95,167.78 191.54,117.10 213.13,141.36 234.72,136.22 256.31,154.83 277.90,175.74 299.49,178.29 321.08,168.52 342.67,152.70 364.26,134.09 385.85,62.30 407.44,32.14 429.03,79.33 450.62,69.83 472.21,86.19 493.79,99.14 515.38,55.49 536.97,59.35 558.56,117.40 580.15,104.72 601.74,110.65 623.33,143.90 644.92,169.10 666.51,185.11 688.10,182.78 709.69,192.70 731.28,187.51 752.87,128.78 774.46,150.35 796.05,172.02 817.64,176.56 839.23,140.19 860.82,158.81 882.41,111.92 904.00,149.29" fill="none" stroke="var(--series-1)" stroke-width="2"
+            stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+  <text x="54" y="254.0" text-anchor="end" class="tick">$9,968</text><text x="54" y="195.5" text-anchor="end" class="tick">$10,125</text><text x="54" y="137.0" text-anchor="end" class="tick">$10,281</text><text x="54" y="78.5" text-anchor="end" class="tick">$10,437</text><text x="54" y="20.0" text-anchor="end" class="tick">$10,594</text><text x="62.0" y="272" text-anchor="start" class="tick">07-10</text><text x="493.8" y="272" text-anchor="middle" class="tick">08-07</text><text x="904.0" y="272" text-anchor="end" class="tick">09-03</text>
+  <line class="crosshair" x1="0" y1="16" x2="0" y2="250"
+        stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 3" opacity="0"/>
+  <circle class="cursor-dot" r="4" fill="var(--series-1)" stroke="var(--surface-1)"
+          stroke-width="2" opacity="0"/>
+</svg><div class="tip" id="t1"></div></div>
+
+  <h2>Open positions</h2>
+  <div class="card scroll"><table><thead><tr><th>Symbol</th><th class="n">Shares</th><th class="n">Avg cost</th><th class="n">Value</th><th class="n">Open P&amp;L</th></tr></thead><tbody><tr><td><strong>NVDA</strong></td><td class='n'>12</td><td class='n'>$182.44</td><td class='n'>$2,298.60</td><td class='n pos'>$+109.32</td></tr><tr><td><strong>QQQ</strong></td><td class='n'>4</td><td class='n'>$602.10</td><td class='n'>$2,392.80</td><td class='n neg'>$-15.60</td></tr><tr><td><strong>XLK</strong></td><td class='n'>9</td><td class='n'>$271.05</td><td class='n'>$2,465.10</td><td class='n pos'>$+25.65</td></tr></tbody></table></div>
+
+  <h2>What the agent did on its last run</h2>
+  <div class="card"><ul class="events"><li class="ev ok"><span class="tag">bought</span> <strong>JPM</strong> 11 sh, stop $279.90, target $305.40, risking $93.50</li><li class="ev block"><span class="tag">blocked</span> <strong>AAPL</strong> earnings on 2026-09-11, in 8 day(s)</li><li class="ev block"><span class="tag">blocked</span> <strong>ORCL</strong> company cut full-year guidance two days ago</li><li class="ev skip"><span class="tag">skipped</span> <strong>AMD</strong> already holding 5 positions (max 5)</li></ul></div>
+
+  <h2>Briefing</h2>
+  <div class="card brief"><p>Your three open positions are all in technology, which means they are not really three positions. A sector-wide down day moves all of them together.</p><p>JPM was bought today at the open. AAPL was blocked because it reports earnings on September 11, inside the expected hold window. ORCL was blocked after it cut full-year guidance on Monday.</p><p>Nothing else on the watchlist met the entry rules.</p></div>
+
+  <h2>Recently closed</h2>
+  <div class="card scroll"><table><thead><tr><th>Symbol</th><th>Closed</th><th>Why</th><th class="n">P&amp;L</th></tr></thead><tbody><tr><td><strong>SMH</strong></td><td>2026-08-28</td><td>sold</td><td class='n pos'>$+100.31</td></tr><tr><td><strong>COST</strong></td><td>2026-08-21</td><td>sold</td><td class='n neg'>$-44.64</td></tr></tbody></table></div>
+
+  <footer>
+    Generated 2026-09-03T19:32:07+00:00 UTC from the agent's own run records.
+    Numbers update only when the agent runs; this page does not poll anything.<br>
+    A paper account is fake money. Results here are not a prediction of what
+    real money would do, and past results do not tell you what comes next.
+  </footer>
+</div>
+<script>
+(function(){
+  var pts = [{"x": 62.0, "y": 233.86, "d": "07-10", "v": 10011.27}, {"x": 83.59, "y": 216.94, "d": "07-13", "v": 10056.51}, {"x": 105.18, "y": 227.8, "d": "07-14", "v": 10027.47}, {"x": 126.77, "y": 214.22, "d": "07-15", "v": 10063.78}, {"x": 148.36, "y": 183.31, "d": "07-16", "v": 10146.4}, {"x": 169.95, "y": 167.78, "d": "07-17", "v": 10187.9}, {"x": 191.54, "y": 117.1, "d": "07-20", "v": 10323.37}, {"x": 213.13, "y": 141.36, "d": "07-21", "v": 10258.53}, {"x": 234.72, "y": 136.22, "d": "07-22", "v": 10272.27}, {"x": 256.31, "y": 154.83, "d": "07-23", "v": 10222.53}, {"x": 277.9, "y": 175.74, "d": "07-24", "v": 10166.63}, {"x": 299.49, "y": 178.29, "d": "07-27", "v": 10159.81}, {"x": 321.08, "y": 168.52, "d": "07-28", "v": 10185.92}, {"x": 342.67, "y": 152.7, "d": "07-29", "v": 10228.21}, {"x": 364.26, "y": 134.09, "d": "07-30", "v": 10277.97}, {"x": 385.85, "y": 62.3, "d": "07-31", "v": 10469.86}, {"x": 407.44, "y": 32.14, "d": "08-03", "v": 10550.48}, {"x": 429.03, "y": 79.33, "d": "08-04", "v": 10424.34}, {"x": 450.62, "y": 69.83, "d": "08-05", "v": 10449.72}, {"x": 472.21, "y": 86.19, "d": "08-06", "v": 10406.0}, {"x": 493.79, "y": 99.14, "d": "08-07", "v": 10371.39}, {"x": 515.38, "y": 55.49, "d": "08-10", "v": 10488.06}, {"x": 536.97, "y": 59.35, "d": "08-11", "v": 10477.75}, {"x": 558.56, "y": 117.4, "d": "08-12", "v": 10322.57}, {"x": 580.15, "y": 104.72, "d": "08-13", "v": 10356.48}, {"x": 601.74, "y": 110.65, "d": "08-14", "v": 10340.61}, {"x": 623.33, "y": 143.9, "d": "08-17", "v": 10251.73}, {"x": 644.92, "y": 169.1, "d": "08-18", "v": 10184.39}, {"x": 666.51, "y": 185.11, "d": "08-19", "v": 10141.59}, {"x": 688.1, "y": 182.78, "d": "08-20", "v": 10147.81}, {"x": 709.69, "y": 192.7, "d": "08-21", "v": 10121.29}, {"x": 731.28, "y": 187.51, "d": "08-24", "v": 10135.17}, {"x": 752.87, "y": 128.78, "d": "08-25", "v": 10292.16}, {"x": 774.46, "y": 150.35, "d": "08-26", "v": 10234.5}, {"x": 796.05, "y": 172.02, "d": "08-27", "v": 10176.58}, {"x": 817.64, "y": 176.56, "d": "08-28", "v": 10164.44}, {"x": 839.23, "y": 140.19, "d": "08-31", "v": 10261.65}, {"x": 860.82, "y": 158.81, "d": "09-01", "v": 10211.89}, {"x": 882.41, "y": 111.92, "d": "09-02", "v": 10337.23}, {"x": 904.0, "y": 149.29, "d": "09-03", "v": 10237.32}];
+  var card = document.getElementById('c1'), tip = document.getElementById('t1');
+  if (!card || !pts.length) return;
+  var svg = card.querySelector('svg');
+  var cross = svg.querySelector('.crosshair'), dot = svg.querySelector('.cursor-dot');
+  function at(clientX) {
+    var r = svg.getBoundingClientRect();
+    var vx = (clientX - r.left) / r.width * 920;
+    var best = 0, bd = Infinity;
+    for (var i = 0; i < pts.length; i++) {
+      var d = Math.abs(pts[i].x - vx);
+      if (d < bd) { bd = d; best = i; }
+    }
+    var p = pts[best];
+    cross.setAttribute('x1', p.x); cross.setAttribute('x2', p.x);
+    cross.setAttribute('opacity', '1');
+    dot.setAttribute('cx', p.x); dot.setAttribute('cy', p.y);
+    dot.setAttribute('opacity', '1');
+    tip.innerHTML = p.d + ' &middot; <b>$' +
+      p.v.toLocaleString(undefined, {maximumFractionDigits: 0}) + '</b>';
+    tip.style.opacity = '1';
+    tip.style.left = Math.min(Math.max(p.x / 920 * r.width - 48, 4), r.width - 140) + 'px';
+    tip.style.top = Math.max(p.y / 280 * r.height - 40, 2) + 'px';
+  }
+  card.addEventListener('mousemove', function(e){ at(e.clientX); });
+  card.addEventListener('touchstart', function(e){ at(e.touches[0].clientX); }, {passive:true});
+  card.addEventListener('touchmove', function(e){ at(e.touches[0].clientX); }, {passive:true});
+  function hide(){ tip.style.opacity='0'; cross.setAttribute('opacity','0');
+    dot.setAttribute('opacity','0'); }
+  card.addEventListener('mouseleave', hide);
+  card.addEventListener('touchend', hide);
+})();
+</script>
+</body>
+</html>

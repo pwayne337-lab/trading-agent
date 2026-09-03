@@ -1,0 +1,439 @@
+"""
+Correctness checks for the strategy and backtest engine.
+
+These do not test whether the strategy makes money. They test whether the
+code does what it claims. Those are completely different questions, and only
+the second one can be answered by a computer.
+
+Run with:  python -m tests.test_logic
+"""
+
+import sys
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from tbot.config import AgentConfig
+from tbot.backtest import run_backtest
+from tbot.indicators import add_indicators, atr, ema, sma
+from tbot.risk import size_position
+from tbot.strategy import prepare, signals_for_symbol, _row_signal
+from tests.synthetic import make_series, universe
+
+FAILURES = []
+
+
+def check(name, condition, detail=""):
+    status = "PASS" if condition else "FAIL"
+    print(f"  [{status}] {name}" + (f"  -> {detail}" if detail and not condition else ""))
+    if not condition:
+        FAILURES.append(name)
+
+
+# ---------------------------------------------------------------------------
+print("\n1. Indicators use only past data")
+# ---------------------------------------------------------------------------
+
+df = make_series(n=400, seed=3)
+full = add_indicators(df, AgentConfig().strategy)
+truncated = add_indicators(df.iloc[:300], AgentConfig().strategy)
+
+# Every indicator value on bar 299 must be identical whether or not bars 300+
+# exist. If it is not, the indicator is peeking into the future.
+cols = ["sma_fast", "sma_slow", "ema_pb", "atr", "swing_low", "adv"]
+same = all(
+    np.isclose(full[c].iloc[299], truncated[c].iloc[299], equal_nan=True)
+    for c in cols
+)
+check("indicator values unchanged when future bars are removed", same)
+
+# EMA sanity against a hand computation.
+manual = df["close"].ewm(span=20, adjust=False, min_periods=20).mean()
+check("ema matches reference implementation",
+      np.isclose(full["ema_pb"].dropna().iloc[-1], manual.dropna().iloc[-1]))
+
+# ATR must be positive and roughly the size of a typical daily range.
+med_range = (df["high"] - df["low"]).median()
+last_atr = full["atr"].iloc[-1]
+check("atr is in the right ballpark vs median daily range",
+      0.4 * med_range < last_atr < 3.0 * med_range,
+      f"atr={last_atr:.2f} median_range={med_range:.2f}")
+
+
+# ---------------------------------------------------------------------------
+print("\n2. Signal rules fire only when every condition is true")
+# ---------------------------------------------------------------------------
+
+cfg = AgentConfig()
+data = prepare(make_series(n=1200, seed=11), cfg.strategy)
+sigs = signals_for_symbol("TEST", make_series(n=1200, seed=11), cfg.strategy)
+check("some signals were generated on synthetic data", len(sigs) > 0, f"n={len(sigs)}")
+
+bad_trend = bad_reclaim = bad_stop = 0
+for s in sigs:
+    i = data.index.get_loc(s.signal_date)
+    row, prev = data.iloc[i], data.iloc[i - 1]
+    if not (row["close"] > row["sma_slow"] and row["sma_fast"] > row["sma_slow"]):
+        bad_trend += 1
+    if not (prev["close"] <= prev["ema_pb"] and row["close"] > row["ema_pb"]):
+        bad_reclaim += 1
+    if not (s.stop < row["close"]):
+        bad_stop += 1
+
+check("every signal passed the trend filter", bad_trend == 0, f"{bad_trend} bad")
+check("every signal is a genuine 20 EMA reclaim", bad_reclaim == 0, f"{bad_reclaim} bad")
+check("every stop sits below the trigger close", bad_stop == 0, f"{bad_stop} bad")
+
+# Stop distance guard rails were honored.
+viol = [s for s in sigs
+        if not (cfg.strategy.min_stop_atr - 1e-9
+                <= (s.reference_close - s.stop) / s.atr
+                <= cfg.strategy.max_stop_atr + 1e-9)]
+check("stop distance stayed inside the ATR guard rails", len(viol) == 0, f"{len(viol)} bad")
+
+# Signals must not change when future data is appended or removed.
+early = signals_for_symbol("TEST", make_series(n=1200, seed=11).iloc[:900], cfg.strategy)
+overlap = [s for s in sigs if s.signal_date <= data.index[899]]
+match = (len(early) == len(overlap)
+         and all(a.signal_date == b.signal_date and np.isclose(a.stop, b.stop)
+                 for a, b in zip(early, overlap)))
+check("historical signals do not change when later bars are removed", match,
+      f"{len(early)} vs {len(overlap)}")
+
+
+# ---------------------------------------------------------------------------
+print("\n3. Position sizing math")
+# ---------------------------------------------------------------------------
+
+cfg = AgentConfig()
+cfg.risk.starting_equity = 10_000
+o = size_position(10_000, entry=100.0, stop=98.0, cfg_risk=cfg.risk,
+                  cfg_strategy=cfg.strategy)
+# Risk $100, $2 per share => 50 shares, $5,000 notional (50% of equity) which
+# is over the 25% cap, so the cap should bind at 25 shares.
+check("position cap binds before risk sizing when the stop is wide", o.shares == 25,
+      f"shares={o.shares}")
+
+o2 = size_position(10_000, entry=20.0, stop=19.0, cfg_risk=cfg.risk,
+                   cfg_strategy=cfg.strategy)
+# Risk $100, $1 per share => 100 shares, $2,000 notional = 20% of equity, under
+# the cap, so risk sizing binds.
+check("risk sizing binds when the stop is tight enough", o2.shares == 100,
+      f"shares={o2.shares}")
+check("dollars at risk equals 1% of equity", np.isclose(o2.dollars_at_risk, 100.0),
+      f"{o2.dollars_at_risk}")
+check("target is 2R above entry", np.isclose(o2.target, 22.0), f"{o2.target}")
+
+o3 = size_position(10_000, entry=100.0, stop=101.0, cfg_risk=cfg.risk,
+                   cfg_strategy=cfg.strategy)
+check("a stop above entry is refused", not o3.ok and o3.shares == 0)
+
+o4 = size_position(10_000, entry=100.0, stop=98.0, cfg_risk=cfg.risk,
+                   cfg_strategy=cfg.strategy, open_positions=5)
+check("position count limit is enforced", not o4.ok, o4.rejected_reason or "")
+
+o5 = size_position(10_000, entry=100.0, stop=98.0, cfg_risk=cfg.risk,
+                   cfg_strategy=cfg.strategy, halted=True)
+check("drawdown breaker blocks new trades", not o5.ok, o5.rejected_reason or "")
+
+# Correlation guard: five copies of the same bet is one bet at five times
+# the size, and the sizing math does not know that unless we tell it.
+from tbot.risk import correlation_block
+
+_r = np.random.default_rng(5)
+_base = _r.normal(0, 0.01, 300)
+_rets = pd.DataFrame({
+    "QQQ": _base,
+    "XLK": _base * 0.98 + _r.normal(0, 0.0015, 300),   # near-identical
+    "TLT": _r.normal(0, 0.006, 300),                    # unrelated
+}, index=pd.bdate_range("2025-01-01", periods=300))
+
+check("a near-duplicate of a held position is refused",
+      correlation_block("XLK", ["QQQ"], _rets, 60, 0.80) is not None)
+check("an unrelated position is allowed",
+      correlation_block("TLT", ["QQQ"], _rets, 60, 0.80) is None)
+check("a symbol is never blocked against itself",
+      correlation_block("QQQ", ["QQQ"], _rets, 60, 0.80) is None)
+check("nothing held means nothing to block",
+      correlation_block("XLK", [], _rets, 60, 0.80) is None)
+check("too little history does not block on noise",
+      correlation_block("XLK", ["QQQ"], _rets.head(8), 60, 0.80) is None)
+check("the block explains itself in words",
+      "QQQ" in (correlation_block("XLK", ["QQQ"], _rets, 60, 0.80) or ""))
+
+
+# ---------------------------------------------------------------------------
+print("\n4. Backtest fills and accounting")
+# ---------------------------------------------------------------------------
+
+bars = universe(["AAA", "BBB", "CCC", "DDD"], seed0=21, n=1400)
+cfg = AgentConfig()
+res = run_backtest(bars, cfg)
+tdf = res.trades_df()
+
+check("backtest produced trades", len(tdf) > 0, f"n={len(tdf)}")
+check("no trade was entered before its signal",
+      all(t.entry_date > t.signal_date for t in res.trades))
+check("no trade exited before it was entered",
+      all(t.exit_date >= t.entry_date for t in res.trades))
+check("never more open positions than the limit",
+      res.equity["open_positions"].max() <= cfg.risk.max_open_positions,
+      f"max={res.equity['open_positions'].max()}")
+check("equity never went negative", (res.equity["equity"] > 0).all())
+check("cash never went negative (no accidental margin)",
+      (res.equity["cash"] >= -1e-6).all(),
+      f"min cash={res.equity['cash'].min():.2f}")
+
+# Losses should cluster near -1R. They will not all be exactly -1R because of
+# gaps and slippage, which is exactly the point.
+stop_outs = tdf[tdf["reason"] == "stop"]
+if len(stop_outs):
+    typical = stop_outs["R"].median()
+    check("a clean stop-out loses about the 1R the sizing intended",
+          -1.15 < typical < -0.9, f"median stop-out = {typical:.2f}R")
+
+gaps = tdf[tdf["reason"] == "gap through stop"]
+if len(gaps):
+    check("gaps through the stop lose MORE than 1R (this is the real risk)",
+          gaps["R"].median() < -1.0, f"median gap loss = {gaps['R'].median():.2f}R")
+
+soft = tdf[(tdf["R"] < 0) & (tdf["reason"].isin(["trend break", "time stop"]))]
+if len(soft):
+    check("trend-break exits cut losses before the stop is reached",
+          soft["R"].median() > -1.0, f"median = {soft['R'].median():.2f}R")
+
+winners = tdf[tdf["R"] > 0]
+target_hits = tdf[tdf["reason"].isin(["target", "gap through target"])]
+if len(target_hits):
+    check("target exits land near +2R",
+          1.5 < target_hits["R"].median() < 2.3,
+          f"median = {target_hits['R'].median():.2f}R")
+
+# Hand-verify one trade end to end.
+print("\n5. Hand check of a single trade")
+t = res.trades[0]
+sym_data = prepare(bars[t.symbol], cfg.strategy)
+sig_i = sym_data.index.get_loc(t.signal_date)
+next_open = float(sym_data.iloc[sig_i + 1]["open"])
+expected_fill = next_open * (1 + cfg.costs.slippage_bps / 10_000)
+print(f"  {t.symbol}: signal {t.signal_date.date()} -> entry {t.entry_date.date()}")
+print(f"  next session open {next_open:.4f}, +{cfg.costs.slippage_bps}bp slippage "
+      f"= {expected_fill:.4f}, actual fill {t.entry:.4f}")
+check("entry filled at the next open plus slippage",
+      np.isclose(t.entry, expected_fill, atol=1e-3))
+check("entry bar is exactly one session after the signal bar",
+      sym_data.index[sig_i + 1] == t.entry_date)
+expected_target = t.entry + cfg.strategy.reward_risk * (t.entry - t.stop)
+check("target is 2x the actual risk taken",
+      np.isclose(t.target, expected_target, atol=1e-2),
+      f"{t.target:.4f} vs {expected_target:.4f}")
+
+print(f"\n  Sample stats: {res.stats()}")
+
+
+# ---------------------------------------------------------------------------
+print("\n6. Research layer can only ever block a trade")
+# ---------------------------------------------------------------------------
+
+from tbot.config import ResearchConfig
+from tbot.research import Researcher, Verdict, screen
+
+r = Researcher(api_key="fake", enabled=True)
+news = [{"title": "Company reports something", "publisher": "Wire", "date": "2026-09-01"}]
+
+def with_reply(text=None, boom=False):
+    def _ask(*a, **kw):
+        if boom:
+            raise RuntimeError("network down")
+        return text
+    r._ask = _ask
+    return r.review_trade("TEST", 100.0, 98.0, 104.0, news)
+
+v = with_reply('{"veto": true, "reason": "pending merger vote", "flags": ["merger"]}')
+check("a well-formed veto is honored", v.veto and "merger" in v.reason)
+
+v = with_reply('{"veto": false, "reason": "nothing notable", "flags": []}')
+check("a well-formed allow is honored", not v.veto)
+
+v = with_reply("the model rambled instead of returning json")
+check("unparseable output does not become a trading decision",
+      not v.veto and v.source == "unavailable")
+
+v = with_reply('{"veto": "yes", "reason": "hmm"}')
+check("only a literal true counts as a veto, not the string 'yes'", not v.veto)
+
+v = with_reply('{"veto": true, "reason": "' + "x" * 900 + '"}')
+check("an absurdly long reason is truncated, not stored whole", len(v.reason) <= 240)
+
+v = with_reply(boom=True)
+check("an API failure is reported as unavailable, not as an allow",
+      not v.veto and v.source == "unavailable")
+
+# The important structural property: a Verdict has no field that could add,
+# enlarge, or re-price a trade. It carries a boolean and an explanation.
+fields = set(Verdict("x", "", [], "").__dict__.keys())
+check("a Verdict cannot express anything except a block and a reason",
+      fields == {"veto", "reason", "flags", "source", "headlines_seen"},
+      str(fields))
+
+rc = ResearchConfig(check_earnings=False, use_llm=True, require_research=True)
+r._ask = lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("down"))
+import tbot.research as research_mod
+_real_headlines = research_mod.headlines
+research_mod.headlines = lambda *a, **kw: news
+v = screen("TEST", 100.0, 98.0, 104.0, r, rc)
+check("with research required, an outage blocks the trade rather than trading blind",
+      v.veto and "unavailable" in v.reason)
+
+rc2 = ResearchConfig(check_earnings=False, use_llm=True, require_research=False)
+v = screen("TEST", 100.0, 98.0, 104.0, r, rc2)
+check("with research optional, an outage lets the trade through", not v.veto)
+research_mod.headlines = _real_headlines
+
+
+# ---------------------------------------------------------------------------
+print("\n7. State recording and the dashboard")
+# ---------------------------------------------------------------------------
+
+import tempfile
+from pathlib import Path as _P
+from tbot import dashboard, state as st_mod
+
+tmp = _P(tempfile.mkdtemp())
+st_mod.STATE_DIR = tmp
+st_mod.STATE_FILE = tmp / "agent_state.json"
+st_mod.EQUITY_FILE = tmp / "equity_history.csv"
+st_mod.RUNLOG_FILE = tmp / "run_log.jsonl"
+
+st_mod.append_equity(10000.0, 5000.0, 2, when="2026-09-01")
+st_mod.append_equity(10100.0, 4000.0, 3, when="2026-09-02")
+st_mod.append_equity(10250.0, 3900.0, 3, when="2026-09-02")   # same day, re-run
+hist = st_mod.load_equity_history()
+check("re-running on the same day replaces the point instead of duplicating it",
+      len(hist) == 2 and hist[-1]["equity"] == 10250.0, str(hist))
+
+s = st_mod.blank_state()
+s["account"] = {"equity": 10250.0, "cash": 3900.0}
+s["mode"] = "paper"
+st_mod.save_state(s)
+check("state round trips through disk", st_mod.load_state()["account"]["equity"] == 10250.0)
+
+html_blank = dashboard.build_html(state=st_mod.blank_state(), history=[])
+check("dashboard renders with no data at all and says so",
+      "<html" in html_blank and "has not run" in html_blank)
+check("empty dashboard has no placeholder numbers presented as real",
+      "Generated never" not in html_blank)
+
+html_full = dashboard.build_html(state=s, history=hist)
+check("dashboard renders with real data", "$10,250.00" in html_full)
+check("dashboard states plainly that paper money is not real money",
+      "fake money" in html_full)
+
+# A stale page must say so rather than looking current.
+s_old = dict(s, updated_at="2026-01-01T00:00:00+00:00")
+check("a stale dashboard warns instead of quietly showing old numbers",
+      "Stale" in dashboard.build_html(state=s_old, history=hist))
+
+# ---------------------------------------------------------------------------
+print("\n7b. Refreshing data must never shorten the cache")
+# ---------------------------------------------------------------------------
+
+from tbot import data as datamod
+
+_cache_backup = datamod.CACHE_DIR
+_tmpcache = _P(tempfile.mkdtemp())
+datamod.CACHE_DIR = _tmpcache
+
+_long = make_series(n=900, seed=77)          # what a backtest downloaded
+_short = _long.tail(120)                      # what a daily run asks for
+
+datamod._cache_path("ZZZ").parent.mkdir(parents=True, exist_ok=True)
+_long.to_csv(datamod._cache_path("ZZZ"))
+
+_real_download = datamod.download_bars
+datamod.download_bars = lambda sym, start=None, end=None, retries=3: _short.copy()
+_after = datamod.load_bars("ZZZ", start="1990-01-01", refresh=True)
+datamod.download_bars = _real_download
+
+check("a short refresh keeps the long history already on disk",
+      len(_after) == len(_long),
+      f"{len(_after)} bars after refresh, {len(_long)} before")
+check("the refreshed bars are still present and current",
+      _after.index[-1] == _long.index[-1])
+_reload = datamod.load_bars("ZZZ", start="1990-01-01")
+check("the merged history is what actually got written to disk",
+      len(_reload) == len(_long), f"{len(_reload)} on disk")
+
+datamod.CACHE_DIR = _cache_backup
+
+
+# ---------------------------------------------------------------------------
+print("\n8. Strategy comparison simulator")
+# ---------------------------------------------------------------------------
+
+from tbot import compare as cmp
+
+_syms = ["SPY", "EFA", "AGG", "SHY", "AAA", "BBB", "CCC", "DDD", "EEE"]
+_bars = {s: make_series(n=2000, seed=200 + i,
+                        drift=0.0004 if s not in ("AGG", "SHY") else 0.00008,
+                        vol=0.011 if s not in ("AGG", "SHY") else 0.002)
+         for i, s in enumerate(_syms)}
+_px = cmp.close_matrix(_bars)
+_uni = ["AAA", "BBB", "CCC", "DDD", "EEE"]
+
+# With no costs, holding one asset at 100% must reproduce that asset exactly.
+# If this drifts, the return or cost math is wrong somewhere.
+_bh = cmp.simulate(_px, cmp.w_buy_hold(_px), slippage_bps=0.0)
+_asset = _px["SPY"] / _px["SPY"].iloc[0] * 10_000
+check("buy and hold reproduces the underlying asset exactly",
+      np.isclose(_bh["equity"].iloc[-1], _asset.iloc[-1], rtol=1e-9),
+      f"{_bh['equity'].iloc[-1]:.4f} vs {_asset.iloc[-1]:.4f}")
+
+# Removing future bars must not change past equity. This is the check that
+# catches a strategy secretly using tomorrow's price to decide today.
+_half = _px.index[1200]
+_trunc = cmp.simulate(_px[_px.index <= _half], cmp.w_trend_filter(_px[_px.index <= _half]), 5.0)
+_full = cmp.simulate(_px, cmp.w_trend_filter(_px), 5.0)
+check("no lookahead: truncating the data leaves past equity unchanged",
+      np.isclose(_trunc["equity"].iloc[-1], _full["equity"].loc[_half], rtol=1e-9))
+
+# Costs must reduce returns, never increase them.
+_free = cmp.simulate(_px, cmp.w_xs_momentum(_px, _uni, top_n=3), 0.0)
+_costly = cmp.simulate(_px, cmp.w_xs_momentum(_px, _uni, top_n=3), 50.0)
+check("higher slippage always produces a worse result",
+      _costly["equity"].iloc[-1] < _free["equity"].iloc[-1])
+
+# No strategy may lever up. Weights must never exceed 100% of the account.
+for _name, _w in [("trend", cmp.w_trend_filter(_px)),
+                  ("dual", cmp.w_dual_momentum(_px)),
+                  ("momentum", cmp.w_xs_momentum(_px, _uni, top_n=3)),
+                  ("equal weight", cmp.w_equal_weight(_px, _uni))]:
+    total = float(_w.sum(axis=1).max())
+    check(f"{_name} never allocates more than 100% (no accidental leverage)",
+          total <= 1.0 + 1e-9, f"max total weight {total:.4f}")
+    check(f"{_name} never goes short", float(_w.to_numpy().min()) >= -1e-12)
+
+# Rebalancing must be monthly, not daily. Daily churn would be a cost bug.
+_turns = cmp.simulate(_px, cmp.w_dual_momentum(_px), 5.0)["turnover"]
+check("rebalancing happens on a handful of days, not every day",
+      (_turns > 1e-9).mean() < 0.10, f"{(_turns > 1e-9).mean()*100:.1f}% of days traded")
+
+_entries = cmp.run_all(_bars, _uni, 5.0, 10_000.0)
+check("every strategy ran", len(_entries) == 5, f"{len(_entries)} ran")
+_tbl = cmp.table(_entries)
+check("comparison table has one row per strategy", len(_tbl) == len(_entries))
+_html = cmp.compare_html(_entries, _tbl, _tbl, _tbl, "2020-01-01")
+check("comparison report renders", "<html" in _html and "log scale" in _html)
+check("report warns that the winner is partly luck", "luckiest" in _html)
+
+# ---------------------------------------------------------------------------
+print("\n" + "=" * 60)
+if FAILURES:
+    print(f"{len(FAILURES)} CHECK(S) FAILED:")
+    for f in FAILURES:
+        print(f"  - {f}")
+    sys.exit(1)
+print("All checks passed.")

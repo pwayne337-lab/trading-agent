@@ -1,0 +1,64 @@
+{
+  "updated_at": "2026-09-03T22:26:56+00:00",
+  "mode": "paper",
+  "healthy": true,
+  "account": {
+    "equity": 100000.0,
+    "cash": 100000.0,
+    "buying_power": 400000.0,
+    "status": "ACTIVE",
+    "pattern_day_trader": null,
+    "trading_blocked": false,
+    "mode": "PAPER"
+  },
+  "positions": [],
+  "signals": [
+    {
+      "symbol": "DIA",
+      "entry": 536.93,
+      "stop": 526.3732,
+      "target": 558.0436,
+      "shares": 46
+    },
+    {
+      "symbol": "QQQ",
+      "entry": 717.67,
+      "stop": 703.6832,
+      "target": 745.6435,
+      "shares": 34
+    }
+  ],
+  "vetoes": [],
+  "orders": [
+    {
+      "symbol": "DIA",
+      "shares": 46,
+      "stop": 526.3732,
+      "target": 558.0436,
+      "dollars_at_risk": 485.61,
+      "order_id": "c588c6c2-c2be-4318-a3c2-a3b6ea91bfba"
+    },
+    {
+      "symbol": "QQQ",
+      "shares": 34,
+      "stop": 703.6832,
+      "target": 745.6435,
+      "dollars_at_risk": 475.55,
+      "order_id": "eded9078-e36c-482e-ae0f-e0bd3a6c028e"
+    }
+  ],
+  "skipped": [
+    {
+      "symbol": "XLK",
+      "reason": "moves almost identically to QQQ (0.96 correlation)"
+    }
+  ],
+  "briefing": "Research is off. Add ANTHROPIC_API_KEY to your .env file to get a written briefing here.",
+  "recent_trades": [],
+  "errors": [],
+  "research": {
+    "llm_calls": 0,
+    "llm_errors": 0,
+    "enabled": false
+  }
+}

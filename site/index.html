@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Trading agent</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1:#fcfcfb; --plane:#f9f9f7;
+    --text-primary:#0b0b0b; --text-secondary:#52514e; --muted:#898781;
+    --gridline:#e1e0d9; --border:rgba(11,11,11,0.10);
+    --series-1:#2a78d6; --good:#006300; --critical:#d03b3b; --warning:#a86a00;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --surface-1:#1a1a19; --plane:#0d0d0d;
+      --text-primary:#fff; --text-secondary:#c3c2b7; --muted:#898781;
+      --gridline:#2c2c2a; --border:rgba(255,255,255,0.10);
+      --series-1:#3987e5; --good:#0ca30c; --critical:#e06060; --warning:#fab219;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--plane);color:var(--text-primary);
+    font:15px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-text-size-adjust:100%}
+  .wrap{max-width:900px;margin:0 auto;padding:20px 16px 56px}
+  header{display:flex;flex-wrap:wrap;gap:8px;align-items:baseline;
+    justify-content:space-between;margin-bottom:16px}
+  h1{font-size:20px;margin:0;letter-spacing:-0.01em}
+  .mode{font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+    border:1px solid var(--border);border-radius:999px;padding:3px 10px;
+    color:var(--text-secondary)}
+  .mode.live{color:var(--critical);border-color:var(--critical)}
+  h2{font-size:14px;margin:26px 0 9px;color:var(--text-secondary);font-weight:600}
+  .banner{border-radius:9px;padding:11px 14px;margin-bottom:14px;font-size:13.5px;
+    border:1px solid var(--border);background:var(--surface-1)}
+  .banner.critical{border-left:3px solid var(--critical)}
+  .banner.warning{border-left:3px solid var(--warning)}
+  .tiles{display:grid;gap:9px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+  .tile{background:var(--surface-1);border:1px solid var(--border);
+    border-radius:10px;padding:12px 14px}
+  .tl{color:var(--text-secondary);font-size:11.5px}
+  .tv{font-size:22px;font-weight:600;margin:3px 0 2px;letter-spacing:-0.02em}
+  .ts{color:var(--muted);font-size:11px}
+  .tile.good .tv{color:var(--good)} .tile.bad .tv,.tile.critical .tv{color:var(--critical)}
+  .tile.warning .tv{color:var(--warning)}
+  .card{background:var(--surface-1);border:1px solid var(--border);
+    border-radius:10px;padding:14px;position:relative}
+  .card.empty{color:var(--muted);font-size:13.5px}
+  .chart{width:100%;height:230px;display:block}
+  .tick{fill:var(--muted);font-size:11px;font-variant-numeric:tabular-nums}
+  .tip{position:absolute;pointer-events:none;opacity:0;background:var(--surface-1);
+    border:1px solid var(--border);border-radius:8px;padding:6px 9px;font-size:12px;
+    box-shadow:0 4px 14px rgba(0,0,0,.14);transition:opacity .1s;white-space:nowrap}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th{text-align:left;color:var(--text-secondary);font-weight:500;
+    border-bottom:1px solid var(--border);padding:7px 8px;white-space:nowrap}
+  td{padding:8px;border-bottom:1px solid var(--gridline)}
+  tr:last-child td{border-bottom:none}
+  .n{text-align:right;font-variant-numeric:tabular-nums}
+  .pos{color:var(--good)} .neg{color:var(--critical)}
+  .scroll{overflow-x:auto}
+  .events{list-style:none;margin:0;padding:0}
+  .ev{padding:9px 0;border-bottom:1px solid var(--gridline);font-size:13.5px}
+  .ev:last-child{border-bottom:none}
+  .ev.quiet{color:var(--muted)}
+  .tag{display:inline-block;font-size:10.5px;text-transform:uppercase;
+    letter-spacing:.06em;padding:2px 7px;border-radius:999px;margin-right:7px;
+    border:1px solid var(--border);color:var(--text-secondary)}
+  .ev.ok .tag{color:var(--good);border-color:var(--good)}
+  .ev.block .tag{color:var(--critical);border-color:var(--critical)}
+  .brief p{margin:0 0 10px} .brief p:last-child{margin:0}
+  footer{margin-top:30px;color:var(--muted);font-size:11.5px;line-height:1.6}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Trading agent</h1>
+    <span class="mode ">PAPER</span>
+  </header>
+
+  
+
+  <div class="tiles"><div class="tile "><div class="tl">Account equity</div><div class="tv">$100,000.00</div><div class="ts">paper account &middot; 1 run(s) recorded</div></div><div class="tile "><div class="tl">Today</div><div class="tv">+0.00%</div><div class="ts">since the previous run</div></div><div class="tile "><div class="tl">Since start</div><div class="tv">+0.00%</div><div class="ts">of tracking</div></div><div class="tile "><div class="tl">Open positions</div><div class="tv">0</div><div class="ts">open P&amp;L $+0.00</div></div><div class="tile "><div class="tl">Cash</div><div class="tv">$100,000.00</div><div class="ts">uninvested</div></div><div class="tile good"><div class="tl">Last run</div><div class="tv">0 min ago</div><div class="ts">2 order(s), 0 blocked</div></div></div>
+
+  <h2>Account equity</h2>
+  <div class="card empty">Not enough history to plot yet. The chart appears after the agent has run on two separate days.</div>
+
+  <h2>Open positions</h2>
+  <div class="card empty">Holding nothing right now.</div>
+
+  <h2>What the agent did on its last run</h2>
+  <div class="card"><ul class="events"><li class="ev ok"><span class="tag">bought</span> <strong>DIA</strong> 46 sh, stop $526.37, target $558.04, risking $485.61</li><li class="ev ok"><span class="tag">bought</span> <strong>QQQ</strong> 34 sh, stop $703.68, target $745.64, risking $475.55</li><li class="ev skip"><span class="tag">skipped</span> <strong>XLK</strong> moves almost identically to QQQ (0.96 correlation)</li></ul></div>
+
+  <h2>Briefing</h2>
+  <div class="card brief"><p>Research is off. Add ANTHROPIC_API_KEY to your .env file to get a written briefing here.</p></div>
+
+  <h2>Recently closed</h2>
+  <div class="card empty">No closed trades yet.</div>
+
+  <footer>
+    Generated 2026-09-03T22:26:56+00:00 UTC from the agent's own run records.
+    Numbers update only when the agent runs; this page does not poll anything.<br>
+    A paper account is fake money. Results here are not a prediction of what
+    real money would do, and past results do not tell you what comes next.
+  </footer>
+</div>
+<script>
+(function(){
+  var pts = [];
+  var card = document.getElementById('c1'), tip = document.getElementById('t1');
+  if (!card || !pts.length) return;
+  var svg = card.querySelector('svg');
+  var cross = svg.querySelector('.crosshair'), dot = svg.querySelector('.cursor-dot');
+  function at(clientX) {
+    var r = svg.getBoundingClientRect();
+    var vx = (clientX - r.left) / r.width * 920;
+    var best = 0, bd = Infinity;
+    for (var i = 0; i < pts.length; i++) {
+      var d = Math.abs(pts[i].x - vx);
+      if (d < bd) { bd = d; best = i; }
+    }
+    var p = pts[best];
+    cross.setAttribute('x1', p.x); cross.setAttribute('x2', p.x);
+    cross.setAttribute('opacity', '1');
+    dot.setAttribute('cx', p.x); dot.setAttribute('cy', p.y);
+    dot.setAttribute('opacity', '1');
+    tip.innerHTML = p.d + ' &middot; <b>$' +
+      p.v.toLocaleString(undefined, {maximumFractionDigits: 0}) + '</b>';
+    tip.style.opacity = '1';
+    tip.style.left = Math.min(Math.max(p.x / 920 * r.width - 48, 4), r.width - 140) + 'px';
+    tip.style.top = Math.max(p.y / 280 * r.height - 40, 2) + 'px';
+  }
+  card.addEventListener('mousemove', function(e){ at(e.clientX); });
+  card.addEventListener('touchstart', function(e){ at(e.touches[0].clientX); }, {passive:true});
+  card.addEventListener('touchmove', function(e){ at(e.touches[0].clientX); }, {passive:true});
+  function hide(){ tip.style.opacity='0'; cross.setAttribute('opacity','0');
+    dot.setAttribute('opacity','0'); }
+  card.addEventListener('mouseleave', hide);
+  card.addEventListener('touchend', hide);
+})();
+</script>
+</body>
+</html>

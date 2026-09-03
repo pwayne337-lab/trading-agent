@@ -1,0 +1,69 @@
+# This file is ready to use, but do not enable it until you have decided the
+# repo visibility question in the README, under "Publishing the dashboard".
+name: Daily agent run
+
+on:
+  # 21:30 UTC on weekdays. That is after the US close in both summer and
+  # winter, so it never runs against a half-finished bar. GitHub's scheduler
+  # can be late by several minutes under load, which does not matter here
+  # because the agent trades the next session's open.
+  schedule:
+    - cron: "30 21 * * 1-5"
+  # Lets you trigger a run by hand from the Actions tab.
+  workflow_dispatch:
+
+permissions:
+  contents: write      # to commit the updated state back to the repo
+  pages: write         # to publish the dashboard
+  id-token: write
+
+concurrency:
+  group: daily-agent
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Verify the engine before letting it trade
+        run: python -m tests.test_logic
+
+      - name: Run the agent
+        env:
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_API_SECRET: ${{ secrets.ALPACA_API_SECRET }}
+          ALPACA_BASE_URL: ${{ secrets.ALPACA_BASE_URL }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python agent.py run --submit
+
+      - name: Commit the day's record
+        run: |
+          git config user.name "trading-agent"
+          git config user.email "actions@github.com"
+          git add state site
+          git diff --staged --quiet || git commit -m "run $(date -u +%Y-%m-%d)"
+          git push
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  publish:
+    needs: run
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4
