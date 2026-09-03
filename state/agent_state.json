@@ -1,11 +1,11 @@
 {
-  "updated_at": "2026-09-03T22:26:56+00:00",
+  "updated_at": "2026-09-03T23:18:17+00:00",
   "mode": "paper",
   "healthy": true,
   "account": {
     "equity": 100000.0,
     "cash": 100000.0,
-    "buying_power": 400000.0,
+    "buying_power": 350934.45,
     "status": "ACTIVE",
     "pattern_day_trader": null,
     "trading_blocked": false,
@@ -36,7 +36,7 @@
       "stop": 526.3732,
       "target": 558.0436,
       "dollars_at_risk": 485.61,
-      "order_id": "c588c6c2-c2be-4318-a3c2-a3b6ea91bfba"
+      "order_id": "cb3b2a05-fbcf-4f0a-9d24-340038d02dee"
     },
     {
       "symbol": "QQQ",
@@ -44,7 +44,7 @@
       "stop": 703.6832,
       "target": 745.6435,
       "dollars_at_risk": 475.55,
-      "order_id": "eded9078-e36c-482e-ae0f-e0bd3a6c028e"
+      "order_id": "2974c2d8-682d-4fba-983a-bc0b7fb91d6f"
     }
   ],
   "skipped": [
