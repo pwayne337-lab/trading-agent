@@ -34,7 +34,7 @@ from tbot.config import DEFAULT_WATCHLIST, AgentConfig
 from tbot.dashboard import write_dashboard
 from tbot.research import Researcher, screen
 from tbot.risk import correlation_block, size_position
-from tbot.strategy import latest_signal, trend_state
+from tbot.strategy import exit_decision, latest_signal, trend_state
 
 
 def load_dotenv():
@@ -220,6 +220,39 @@ def cmd_run(args):
               "The earnings filter still runs.\n")
 
     bars = datamod.load_universe(cfg.watchlist, start=args.start, refresh=True)
+
+    # --- manage what is already open, before looking for anything new -------
+    # The stop and target are live at the broker and need no help. These two
+    # exits depend on the daily close, so nothing but this run can act on them.
+    entry_dates = broker.entry_dates() if positions else {}
+    for p in positions:
+        sym = p["symbol"]
+        df = bars.get(sym)
+        if df is None:
+            continue
+
+        bars_held = None
+        if sym in entry_dates:
+            try:
+                since = pd.Timestamp(entry_dates[sym])
+                bars_held = int((df.index > since).sum())
+            except Exception:
+                bars_held = None
+
+        reason = exit_decision(df, cfg.strategy, bars_held)
+        if not reason:
+            continue
+
+        fill = broker.close_position(sym, allow_live=cfg.allow_live_trading,
+                                     acknowledged=args.i_understand_the_risk)
+        print(f"  {sym}: CLOSING, {reason}")
+        st["exits"].append({"symbol": sym, "reason": reason,
+                            "status": fill.status,
+                            "unrealized_pl": p.get("unrealized_pl")})
+        if fill.submitted:
+            held.discard(sym)
+            gross -= p.get("market_value", 0)
+            open_count = max(0, open_count - 1)
 
     returns = pd.DataFrame({s: d["close"].pct_change() for s, d in bars.items()})
     committed = set(held)   # grows as this run takes positions

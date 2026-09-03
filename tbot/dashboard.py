@@ -151,6 +151,13 @@ def build_html(state: dict = None, history: list = None,
 
     # -- today --------------------------------------------------------------
     items = []
+    for e in (state.get("exits") or []):
+        pl = e.get("unrealized_pl")
+        pl_txt = f", P&amp;L ${float(pl):+,.2f}" if pl is not None else ""
+        items.append(
+            f'<li class="ev sold"><span class="tag">sold</span> '
+            f'<strong>{_esc(e.get("symbol"))}</strong> {_esc(e.get("reason"))}'
+            f'{pl_txt}</li>')
     for o in orders:
         items.append(
             f'<li class="ev ok"><span class="tag">bought</span> '
@@ -272,6 +279,7 @@ def build_html(state: dict = None, history: list = None,
     border:1px solid var(--border);color:var(--text-secondary)}}
   .ev.ok .tag{{color:var(--good);border-color:var(--good)}}
   .ev.block .tag{{color:var(--critical);border-color:var(--critical)}}
+  .ev.sold .tag{{color:var(--warning);border-color:var(--warning)}}
   .brief p{{margin:0 0 10px}} .brief p:last-child{{margin:0}}
   footer{{margin-top:30px;color:var(--muted);font-size:11.5px;line-height:1.6}}
 </style>

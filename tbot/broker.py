@@ -219,12 +219,50 @@ class AlpacaBroker:
         order = self._request("POST", "/v2/orders", json=payload)
         return Fill(symbol, shares, order.get("id", ""), order.get("status", "?"), True)
 
+    def cancel_orders_for(self, symbol: str) -> int:
+        """Cancel every working order on one symbol. Returns how many.
+
+        Needed before closing a position: the bracket's stop and target legs
+        are themselves orders that reserve the shares, so a close attempt
+        while they are alive is rejected for insufficient quantity.
+        """
+        if self.dry_run:
+            return 0
+        n = 0
+        for o in self.open_orders():
+            if o.get("symbol") == symbol and o.get("id"):
+                try:
+                    self._request("DELETE", f"/v2/orders/{o['id']}")
+                    n += 1
+                except BrokerError:
+                    pass   # already filled or cancelled between list and delete
+        return n
+
+    def entry_dates(self) -> Dict[str, str]:
+        """Most recent buy-fill date per symbol, for the time stop."""
+        out: Dict[str, str] = {}
+        try:
+            fills = sorted(self.activities(), key=lambda a: a.get("transaction_time", ""))
+        except BrokerError:
+            return out
+        for f in fills:
+            sym, side = f.get("symbol"), f.get("side", "")
+            when = (f.get("transaction_time") or "")[:10]
+            if not sym or not when:
+                continue
+            if side.startswith("buy"):
+                out[sym] = when
+            elif side.startswith("sell"):
+                out.pop(sym, None)     # position closed, clock resets
+        return out
+
     def close_position(self, symbol: str, allow_live: bool = False,
                        acknowledged: bool = False) -> Fill:
         if self.is_live and not (allow_live and acknowledged):
             raise BrokerError("refusing to close a LIVE position without both safety flags")
         if self.dry_run:
             return Fill(symbol, 0, "", "dry-run", False, f"would close {symbol}")
+        self.cancel_orders_for(symbol)
         order = self._request("DELETE", f"/v2/positions/{symbol}")
         return Fill(symbol, int(float(order.get("qty", 0))), order.get("id", ""),
                     order.get("status", "?"), True)

@@ -133,6 +133,40 @@ def latest_signal(sym: str, df: pd.DataFrame, cfg) -> Optional[Signal]:
     return _row_signal(sym, data.index[-1], data.iloc[-1], data.iloc[-2], cfg)
 
 
+def exit_decision(df: pd.DataFrame, cfg, bars_held: Optional[int] = None
+                  ) -> Optional[str]:
+    """Should an open position be closed? Returns a reason, or None to hold.
+
+    The stop and the target look after themselves: they are submitted to the
+    broker as bracket legs when the trade opens, so they fire the moment price
+    reaches them, at any hour, whether or not this program is running.
+
+    These two exits are different. They depend on where the CLOSE lands
+    relative to a moving average, or on how long the trade has been open, so
+    nothing at the broker can evaluate them. Somebody has to look once a day
+    and act. That somebody is this function.
+
+    In the backtest, these two accounted for more than half of all exits, so a
+    live agent that skips them is not running the strategy that was tested.
+    """
+    data = prepare(df, cfg)
+    if len(data) < 2:
+        return None
+    row = data.iloc[-1]
+
+    if cfg.exit_on_trend_break and not pd.isna(row["sma_fast"]):
+        if float(row["close"]) < float(row["sma_fast"]):
+            return (f"trend break: closed at ${float(row['close']):,.2f}, "
+                    f"below the {cfg.sma_fast}-day average of "
+                    f"${float(row['sma_fast']):,.2f}")
+
+    if bars_held is not None and bars_held >= cfg.max_hold_days:
+        return (f"time stop: held {bars_held} sessions, limit is "
+                f"{cfg.max_hold_days}")
+
+    return None
+
+
 def trend_state(df: pd.DataFrame, cfg) -> dict:
     """Human-readable snapshot of where a symbol stands right now."""
     data = prepare(df, cfg)

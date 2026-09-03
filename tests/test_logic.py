@@ -338,6 +338,46 @@ check("a stale dashboard warns instead of quietly showing old numbers",
       "Stale" in dashboard.build_html(state=s_old, history=hist))
 
 # ---------------------------------------------------------------------------
+print("\n6b. The daily-close exits the broker cannot handle")
+# ---------------------------------------------------------------------------
+
+from tbot.strategy import exit_decision
+
+_cfg = AgentConfig()
+_healthy = make_series(n=400, seed=31, drift=0.0012, vol=0.008)   # steady uptrend
+
+_r = exit_decision(_healthy, _cfg.strategy, bars_held=3)
+check("a position in an uptrend is left alone", _r is None, str(_r))
+
+# Force the last close below the 50-day average.
+_broken = _healthy.copy()
+_broken.iloc[-1, _broken.columns.get_loc("close")] = _healthy["close"].iloc[-1] * 0.70
+_broken.iloc[-1, _broken.columns.get_loc("low")] = _healthy["close"].iloc[-1] * 0.69
+_r = exit_decision(_broken, _cfg.strategy, bars_held=3)
+check("a close below the 50-day average triggers a trend-break exit",
+      _r is not None and "trend break" in _r, str(_r))
+check("the trend-break reason names both prices, so it can be checked by hand",
+      _r is not None and _r.count("$") == 2, str(_r))
+
+_r = exit_decision(_healthy, _cfg.strategy, bars_held=_cfg.strategy.max_hold_days)
+check("a position held to the limit triggers the time stop",
+      _r is not None and "time stop" in _r, str(_r))
+
+_r = exit_decision(_healthy, _cfg.strategy, bars_held=_cfg.strategy.max_hold_days - 1)
+check("one session short of the limit is not exited", _r is None, str(_r))
+
+_cfg_off = AgentConfig()
+_cfg_off.strategy.exit_on_trend_break = False
+check("turning the trend-break rule off actually turns it off",
+      exit_decision(_broken, _cfg_off.strategy, bars_held=3) is None)
+
+check("an unknown holding period never triggers a time stop",
+      exit_decision(_healthy, _cfg.strategy, bars_held=None) is None)
+check("too little history is not treated as a reason to sell",
+      exit_decision(_healthy.head(1), _cfg.strategy, bars_held=3) is None)
+
+
+# ---------------------------------------------------------------------------
 print("\n7a. An unfilled order counts as already owned")
 # ---------------------------------------------------------------------------
 

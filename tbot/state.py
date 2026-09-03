@@ -38,6 +38,7 @@ def blank_state() -> dict:
         "signals": [],
         "vetoes": [],
         "orders": [],
+        "exits": [],
         "skipped": [],
         "briefing": "",
         "recent_trades": [],
