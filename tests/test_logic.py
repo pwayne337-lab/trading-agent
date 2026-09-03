@@ -338,6 +338,35 @@ check("a stale dashboard warns instead of quietly showing old numbers",
       "Stale" in dashboard.build_html(state=s_old, history=hist))
 
 # ---------------------------------------------------------------------------
+print("\n7a. An unfilled order counts as already owned")
+# ---------------------------------------------------------------------------
+
+from tbot.broker import committed_symbols
+
+_pos = [{"symbol": "AAPL", "shares": 10}]
+_ord = [{"symbol": "DIA", "status": "accepted"}, {"symbol": "QQQ", "status": "new"}]
+
+_filled, _working = committed_symbols(_pos, _ord)
+check("filled positions are recognized", _filled == {"AAPL"}, str(_filled))
+check("accepted-but-unfilled orders are recognized", _working == {"DIA", "QQQ"},
+      str(_working))
+check("the agent treats both as off limits for a new buy",
+      (_filled | _working) == {"AAPL", "DIA", "QQQ"})
+
+# The exact bug this prevents: run twice before the open, buy twice.
+_second_run = committed_symbols([], _ord)
+check("a symbol with a working order is not bought again on a second run",
+      "DIA" in (_second_run[0] | _second_run[1]))
+
+check("no positions and no orders means nothing is committed",
+      committed_symbols([], []) == (set(), set()))
+check("missing symbol fields are ignored rather than crashing",
+      committed_symbols([{"qty": 1}], [{"status": "new"}]) == (set(), set()))
+check("None instead of a list is tolerated",
+      committed_symbols(None, None) == (set(), set()))
+
+
+# ---------------------------------------------------------------------------
 print("\n7b. Refreshing data must never shorten the cache")
 # ---------------------------------------------------------------------------
 

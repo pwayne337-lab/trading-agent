@@ -230,6 +230,20 @@ class AlpacaBroker:
                     order.get("status", "?"), True)
 
 
+def committed_symbols(positions, open_orders):
+    """Split what the account is already committed to into (filled, working).
+
+    A trading agent must treat both as "already owned". An order that has been
+    accepted but has not filled yet still spends buying power and still
+    becomes a position at the next open. Deciding what to buy from filled
+    positions alone means a second run before the market opens submits the
+    same trade again and doubles the risk on it, with no error anywhere.
+    """
+    filled = {p.get("symbol") for p in (positions or []) if p.get("symbol")}
+    working = {o.get("symbol") for o in (open_orders or []) if o.get("symbol")}
+    return filled, working
+
+
 def describe_safety(broker: AlpacaBroker, cfg) -> str:
     """One-line summary of exactly how dangerous the current setup is."""
     if broker.dry_run:

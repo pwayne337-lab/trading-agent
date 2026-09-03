@@ -28,7 +28,8 @@ from tbot import data as datamod
 from tbot import report as rep
 from tbot import state
 from tbot.backtest import run_backtest
-from tbot.broker import AlpacaBroker, BrokerError, describe_safety
+from tbot.broker import (AlpacaBroker, BrokerError, committed_symbols,
+                         describe_safety)
 from tbot.config import DEFAULT_WATCHLIST, AgentConfig
 from tbot.dashboard import write_dashboard
 from tbot.research import Researcher, screen
@@ -180,7 +181,20 @@ def cmd_run(args):
         return
 
     equity, cash = acct["equity"], acct["cash"]
-    held = {p["symbol"] for p in positions}
+
+    # Count orders that are accepted but not yet filled as already owned.
+    # Without this, a second run before the market opens submits the same
+    # trade again and silently doubles the risk on it.
+    try:
+        orders_open = broker.open_orders()
+    except BrokerError as exc:
+        orders_open = []
+        st["errors"].append(f"could not read working orders: {exc}")
+
+    held, working = committed_symbols(positions, orders_open)
+    pending_only = sorted(working - held)
+    held |= working
+
     gross = sum(p["market_value"] for p in positions)
     open_count = len(held)
 
@@ -188,7 +202,10 @@ def cmd_run(args):
     st["positions"] = positions
     print(f"Account: {acct['mode']}  equity ${equity:,.2f}  "
           f"buying power ${acct['buying_power']:,.2f}")
-    print(f"Holding {open_count}: {sorted(held) or 'nothing'}\n")
+    print(f"Committed to {open_count}: {sorted(held) or 'nothing'}")
+    if pending_only:
+        print(f"  (orders already working, not yet filled: {pending_only})")
+    print()
 
     if acct.get("trading_blocked"):
         st["errors"].append("trading blocked on this account")
