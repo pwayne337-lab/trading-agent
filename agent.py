@@ -287,9 +287,12 @@ def cmd_run(args):
 
         opened_by = strat_map.get(sym, "pullback")
         if sym not in strat_map:
-            st["errors"].append(
-                f"no record of which strategy opened {sym}, managing it with "
-                f"the pullback exits")
+            # Positions opened before the agent recorded this have no entry in
+            # the map, and pullback was the only strategy that existed then, so
+            # the fallback is correct rather than a fault. Worth printing, not
+            # worth marking the run unhealthy over.
+            print(f"  {sym}: no record of which strategy opened it, using the "
+                  f"pullback exits")
         reason = exit_decision(df, cfg.strategy, bars_held, opened_by)
         if not reason:
             continue

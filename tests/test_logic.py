@@ -697,6 +697,62 @@ datamod.CACHE_DIR = _cache_backup
 
 
 # ---------------------------------------------------------------------------
+print("\n7b-ii-b. Batched downloads must split the frame correctly")
+# ---------------------------------------------------------------------------
+# 194 symbols one at a time is 194 requests per run, which from a shared CI
+# address gets rate limited into a half-empty result. The batch path is what
+# avoids that, so if its column splitting is wrong every symbol quietly falls
+# back to an individual request and the whole point is lost, with no error.
+
+import sys as _sys, types as _types
+
+_syms = ["AAA", "BBB", "CCC"]
+_idx = pd.bdate_range("2024-01-01", periods=40)
+_frames = {}
+for _n, _sy in enumerate(_syms):
+    _frames[_sy] = pd.DataFrame({
+        "Open": 100.0 + _n, "High": 101.0 + _n, "Low": 99.0 + _n,
+        "Close": 100.5 + _n, "Volume": 1_000_000 + _n,
+    }, index=_idx)
+
+# yfinance hands back (field, ticker) columns for a multi-symbol request.
+_multi = pd.concat(_frames, axis=1).swaplevel(0, 1, axis=1).sort_index(axis=1)
+
+_calls = []
+def _fake_download(tickers, **kw):
+    _calls.append(list(tickers) if isinstance(tickers, (list, tuple)) else [tickers])
+    want = tickers if isinstance(tickers, (list, tuple)) else [tickers]
+    keep = [c for c in _multi.columns if c[1] in want and c[1] != "CCC"]
+    return _multi[keep] if keep else pd.DataFrame()
+
+_fake_yf = _types.ModuleType("yfinance")
+_fake_yf.download = _fake_download
+_real_yf = _sys.modules.get("yfinance")
+_sys.modules["yfinance"] = _fake_yf
+_real_single = datamod.download_bars
+datamod.download_bars = lambda sym, start=None, end=None, retries=3: _frames[sym].rename(
+    columns=str.lower).rename_axis("date")
+try:
+    _got = datamod.download_many(_syms, start="2024-01-01", chunk=10)
+finally:
+    datamod.download_bars = _real_single
+    if _real_yf is not None: _sys.modules["yfinance"] = _real_yf
+    else: _sys.modules.pop("yfinance", None)
+
+check("the batch asks for every symbol in one request",
+      len(_calls) and set(_calls[0]) == set(_syms), str(_calls))
+check("every symbol the batch returned comes back", set(_got) == set(_syms), str(sorted(_got)))
+check("each symbol keeps its OWN prices, not another symbol's",
+      abs(float(_got["AAA"]["close"].iloc[0]) - 100.5) < 1e-6
+      and abs(float(_got["BBB"]["close"].iloc[0]) - 101.5) < 1e-6,
+      f"AAA={_got['AAA']['close'].iloc[0]}, BBB={_got['BBB']['close'].iloc[0]}")
+check("columns come back lowercase and complete",
+      list(_got["AAA"].columns) == datamod.REQUIRED_COLS, str(list(_got["AAA"].columns)))
+check("a symbol the batch skipped is fetched on its own rather than dropped",
+      "CCC" in _got and len(_got["CCC"]) == 40)
+
+
+# ---------------------------------------------------------------------------
 print("\n7b-iii. A failed close must not leave a position without a stop")
 # ---------------------------------------------------------------------------
 from tbot.broker import AlpacaBroker, BrokerError as _BErr
