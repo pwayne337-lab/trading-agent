@@ -38,6 +38,9 @@ jobs:
       - name: Verify the engine before letting it trade
         run: python -m tests.test_logic
 
+      - name: Verify the whole daily run against a fake broker
+        run: python -m tests.smoke_run
+
       - name: Run the agent
         env:
           ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
