@@ -73,7 +73,13 @@ DEFAULT_WATCHLIST: List[str] = [
     "AMT", "PLD", "EQIX", "SPG", "O", "CCI",
 
     # Communications, autos and other large caps
-    "TSLA", "GM", "F", "DIS", "CMCSA", "T", "VZ", "TMUS", "CHTR", "EA",
+    # EA was removed: it stopped trading on 4 August 2026 when the buyout
+    # closed and it was delisted from NASDAQ. The watcher caught it on the
+    # first live run, from a price feed that had been frozen for weeks, which
+    # is exactly the failure that check exists for. Assume there are others in
+    # this list: it was written from memory, and the only reliable way to find
+    # a dead ticker is to watch for one.
+    "TSLA", "GM", "F", "DIS", "CMCSA", "T", "VZ", "TMUS", "CHTR",
     "BRK-B", "MMC", "AON", "ADP", "PAYX", "FI", "CTAS", "ORLY", "AZO", "YUM",
 ]
 
