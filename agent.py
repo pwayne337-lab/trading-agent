@@ -400,6 +400,28 @@ def cmd_compare(args):
     print("period but not that one was fitted to history you already knew.")
 
 
+def cmd_journal(args):
+    """What the closed trades say about which setups worked."""
+    from tbot import journal
+
+    src = rep.REPORTS / "trades.csv"
+    live = state.STATE_DIR / "journal.csv"
+
+    frames = []
+    if args.source in ("both", "live") and live.exists():
+        frames.append(pd.read_csv(live))
+    if args.source in ("both", "backtest") and src.exists():
+        frames.append(pd.read_csv(src))
+
+    if not frames:
+        print("No closed trades to analyze yet.")
+        print("Run `python agent.py backtest` first, or wait for live trades to close.")
+        return
+
+    df = pd.concat(frames, ignore_index=True)
+    print(journal.format_report(journal.analyze(df)))
+
+
 def cmd_dashboard(args):
     page = write_dashboard()
     print(f"Wrote {page}")
@@ -488,6 +510,10 @@ def main():
     cp.add_argument("--split", default=None,
                     help="out-of-sample start date, e.g. 2016-01-01")
     cp.set_defaults(func=cmd_compare)
+
+    j = sub.add_parser("journal", help="what your closed trades actually show")
+    j.add_argument("--source", choices=["both", "live", "backtest"], default="both")
+    j.set_defaults(func=cmd_journal)
 
     d = sub.add_parser("dashboard", help="rebuild the dashboard page")
     d.add_argument("--open", action="store_true", help="open it in your browser")

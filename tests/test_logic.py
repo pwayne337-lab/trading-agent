@@ -472,6 +472,69 @@ datamod.CACHE_DIR = _cache_backup
 
 
 # ---------------------------------------------------------------------------
+print("\n7c. The journal refuses to report noise as a finding")
+# ---------------------------------------------------------------------------
+
+from tbot import journal
+
+_rng = np.random.default_rng(4)
+
+# A small sample must never produce a number, however good it looks.
+_tiny = pd.DataFrame({"R": [2.0, 2.0, 2.0, 2.0, 2.0],
+                      "reason": ["target"] * 5, "symbol": ["AAA"] * 5,
+                      "entry_date": pd.bdate_range("2026-01-01", periods=5)})
+_rep = journal.format_report(journal.analyze(_tiny))
+check("a 5-trade bucket is reported as insufficient, not as a result",
+      "not enough data" in _rep, _rep[:200])
+
+# Pure coin flips must not come out as a real edge.
+_noise = pd.DataFrame({"R": _rng.normal(0, 1.2, 400),
+                       "reason": ["stop"] * 400, "symbol": ["AAA"] * 400,
+                       "entry_date": pd.bdate_range("2020-01-01", periods=400)})
+_res = journal.analyze(_noise)
+check("random results are not called an edge",
+      not _res["overall"].get("real"), str(_res["overall"]))
+check("it says how many trades would be needed instead",
+      "trades_needed" in _res["overall"])
+
+# A genuinely large effect on a large sample should be recognized.
+_real = pd.DataFrame({"R": _rng.normal(0.8, 1.0, 400),
+                      "reason": ["target"] * 400, "symbol": ["AAA"] * 400,
+                      "entry_date": pd.bdate_range("2020-01-01", periods=400)})
+check("a large, well-sampled edge IS recognized",
+      journal.analyze(_real)["overall"].get("real") is True)
+
+# Excursions: losers that were once winners, winners that dipped first.
+_exc = pd.DataFrame({
+    "R": [-1.0, -1.0, 2.0, 2.0],
+    "worst_R": [-1.0, -1.4, -0.8, -0.1],
+    "best_R": [1.5, 0.1, 2.4, 2.0],
+    "reason": ["stop", "gap through stop", "target", "target"],
+    "symbol": ["A"] * 4,
+    "entry_date": pd.bdate_range("2026-01-01", periods=4)})
+_e = journal.excursions(_exc)
+check("it spots losers that were up a full R first",
+      _e["losers_that_were_up_1R"] == 50.0, str(_e))
+check("overruns are measured on the realized loss, not the bar's low",
+      _e["losers_past_planned"] == 0.0,
+      f"both losers realized exactly -1.0R, so none overran: {_e}")
+
+_over = pd.DataFrame({
+    "R": [-1.0, -1.8, 2.0], "worst_R": [-1.0, -2.1, -0.3],
+    "best_R": [0.2, 0.1, 2.1], "reason": ["stop", "gap through stop", "target"],
+    "symbol": ["A"] * 3, "entry_date": pd.bdate_range("2026-01-01", periods=3)})
+_eo = journal.excursions(_over)
+check("a genuine overrun is counted", _eo["losers_past_planned"] == 50.0, str(_eo))
+check("and its average size is reported", _eo["avg_overrun_R"] == -1.8, str(_eo))
+check("it measures how far winners dipped before working",
+      _e["winner_worst_R"] == -0.45, str(_e))
+
+check("the report states plainly that it changes nothing on its own",
+      "Nothing here changes what the agent does" in
+      journal.format_report(journal.analyze(_noise)))
+
+
+# ---------------------------------------------------------------------------
 print("\n8. Strategy comparison simulator")
 # ---------------------------------------------------------------------------
 

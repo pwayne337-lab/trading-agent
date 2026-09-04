@@ -44,6 +44,18 @@ class Trade:
     exit_reason: str = ""
     fees: float = 0.0
 
+    # Conditions at entry, kept so the journal can ask what kind of setup
+    # this was rather than only how it ended.
+    stop_atr: float = float("nan")      # stop distance in ATRs
+    pct_from_ema: float = float("nan")  # how extended above the 20 EMA
+    regime: Optional[bool] = None       # was the broad market above its 200 SMA
+
+    # How far the trade ran each way while it was open, measured in R.
+    # These two are the most diagnostic numbers in the whole system: they say
+    # whether losers were ever winners, and how much room winners needed.
+    worst_R: float = 0.0                # maximum adverse excursion
+    best_R: float = 0.0                 # maximum favorable excursion
+
     @property
     def initial_risk_per_share(self) -> float:
         return self.entry - self.stop
@@ -83,6 +95,9 @@ class PendingEntry:
     symbol: str
     signal_date: pd.Timestamp
     stop: float
+    atr: float = float("nan")
+    pct_from_ema: float = float("nan")
+    regime: Optional[bool] = None
 
 
 class Backtest:
@@ -158,6 +173,14 @@ class Backtest:
 
             t = pos.trade
             o, h, l = float(row["open"]), float(row["high"]), float(row["low"])
+
+            # Track how far the trade travelled each way while it was open.
+            # Done before any exit test, so the bar that closes the trade is
+            # included in the excursion.
+            risk = t.entry - t.stop
+            if risk > 0:
+                t.worst_R = min(t.worst_R, (l - t.entry) / risk)
+                t.best_R = max(t.best_R, (h - t.entry) / risk)
 
             # A queued exit (trend break or time stop) fills at today's open.
             if pos.pending_exit:
@@ -254,6 +277,10 @@ class Backtest:
             if cost > self.cash:
                 continue
 
+            stop_atr = float("nan")
+            if pend.atr == pend.atr and pend.atr > 0:
+                stop_atr = (fill - order.stop) / pend.atr
+
             self.cash -= cost
             self.positions[sym] = Position(
                 trade=Trade(
@@ -265,10 +292,27 @@ class Backtest:
                     target=order.target,
                     shares=order.shares,
                     fees=fee,
+                    stop_atr=round(stop_atr, 3) if stop_atr == stop_atr else float("nan"),
+                    pct_from_ema=round(pend.pct_from_ema, 3)
+                    if pend.pct_from_ema == pend.pct_from_ema else float("nan"),
+                    regime=pend.regime,
                 )
             )
 
     # -- signals ------------------------------------------------------------
+
+    def _regime(self, date: pd.Timestamp) -> Optional[bool]:
+        """Was the broad market above its own 200-day average on this date?"""
+        ref = self.data.get("SPY")
+        if ref is None:
+            return None
+        i = self._pos.get("SPY", {}).get(date)
+        if i is None:
+            return None
+        row = ref.iloc[i]
+        if pd.isna(row["sma_slow"]):
+            return None
+        return bool(float(row["close"]) > float(row["sma_slow"]))
 
     def _scan(self, date: pd.Timestamp):
         for sym, df in self.data.items():
@@ -279,7 +323,14 @@ class Backtest:
                 continue
             sig = _row_signal(sym, date, row, prev, self.cfg.strategy)
             if sig is not None:
-                self.pending[sym] = PendingEntry(sym, date, sig.stop)
+                pct_ema = float("nan")
+                try:
+                    pct_ema = (float(row["close"]) - float(row["ema_pb"])) / float(row["ema_pb"]) * 100
+                except (TypeError, ZeroDivisionError, ValueError):
+                    pass
+                self.pending[sym] = PendingEntry(
+                    sym, date, sig.stop, atr=sig.atr, pct_from_ema=pct_ema,
+                    regime=self._regime(date))
 
     # -- main loop ----------------------------------------------------------
 
@@ -339,6 +390,11 @@ class BacktestResult:
                 "pnl": round(t.pnl, 2),
                 "R": round(t.r_multiple, 2),
                 "days": t.bars_held,
+                "stop_atr": t.stop_atr,
+                "pct_from_ema": t.pct_from_ema,
+                "regime": t.regime,
+                "worst_R": round(t.worst_R, 2),
+                "best_R": round(t.best_R, 2),
             })
         return pd.DataFrame(rows)
 
