@@ -258,6 +258,11 @@ def build_html(state: dict = None, history: list = None,
     color:var(--text-secondary)}}
   .mode.live{{color:var(--critical);border-color:var(--critical)}}
   h2{{font-size:14px;margin:26px 0 9px;color:var(--text-secondary);font-weight:600}}
+  .sitenav{{margin:-6px 0 14px}}
+  .sitenav a{{font-size:12.5px;color:var(--muted);text-decoration:none;
+    border-bottom:1px solid var(--border);padding-bottom:2px}}
+  .sitenav a:hover,.sitenav a:focus-visible{{color:var(--series-1);
+    border-color:var(--series-1)}}
   .banner{{border-radius:9px;padding:11px 14px;margin-bottom:14px;font-size:13.5px;
     border:1px solid var(--border);background:var(--surface-1)}}
   .banner.critical{{border-left:3px solid var(--critical)}}
@@ -306,6 +311,8 @@ def build_html(state: dict = None, history: list = None,
     <h1>{_esc(title)}</h1>
     <span class="mode {'live' if mode == 'LIVE' else ''}">{_esc(mode)}</span>
   </header>
+
+  <nav class="sitenav"><a href="./floor.html">How a run works &rarr;</a></nav>
 
   {banner}
 

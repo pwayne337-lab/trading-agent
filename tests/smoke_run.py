@@ -130,7 +130,7 @@ def _end_today(df):
     Without this the watchers correctly refuse to trade on data from 2017,
     which is the right behavior and makes the rest of the test meaningless.
     """
-    idx = pd.bdate_range(end=pd.Timestamp.utcnow().normalize().tz_localize(None),
+    idx = pd.bdate_range(end=pd.Timestamp.now("UTC").tz_localize(None).normalize(),
                          periods=len(df))
     out = df.copy()
     out.index = idx

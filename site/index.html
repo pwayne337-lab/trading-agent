@@ -35,6 +35,11 @@
     color:var(--text-secondary)}
   .mode.live{color:var(--critical);border-color:var(--critical)}
   h2{font-size:14px;margin:26px 0 9px;color:var(--text-secondary);font-weight:600}
+  .sitenav{margin:-6px 0 14px}
+  .sitenav a{font-size:12.5px;color:var(--muted);text-decoration:none;
+    border-bottom:1px solid var(--border);padding-bottom:2px}
+  .sitenav a:hover,.sitenav a:focus-visible{color:var(--series-1);
+    border-color:var(--series-1)}
   .banner{border-radius:9px;padding:11px 14px;margin-bottom:14px;font-size:13.5px;
     border:1px solid var(--border);background:var(--surface-1)}
   .banner.critical{border-left:3px solid var(--critical)}
@@ -84,9 +89,11 @@
     <span class="mode ">PAPER</span>
   </header>
 
+  <nav class="sitenav"><a href="./floor.html">How a run works &rarr;</a></nav>
+
   
 
-  <div class="tiles"><div class="tile "><div class="tl">Account equity</div><div class="tv">$100,000.00</div><div class="ts">paper account &middot; 1 run(s) recorded</div></div><div class="tile "><div class="tl">Today</div><div class="tv">+0.00%</div><div class="ts">since the previous run</div></div><div class="tile "><div class="tl">Since start</div><div class="tv">+0.00%</div><div class="ts">of tracking</div></div><div class="tile "><div class="tl">Open positions</div><div class="tv">0</div><div class="ts">open P&amp;L $+0.00</div></div><div class="tile "><div class="tl">Cash</div><div class="tv">$100,000.00</div><div class="ts">uninvested</div></div><div class="tile good"><div class="tl">Last run</div><div class="tv">50 min ago</div><div class="ts">2 order(s), 0 blocked</div></div></div>
+  <div class="tiles"><div class="tile "><div class="tl">Account equity</div><div class="tv">$100,000.00</div><div class="ts">paper account &middot; 1 run(s) recorded</div></div><div class="tile "><div class="tl">Today</div><div class="tv">+0.00%</div><div class="ts">since the previous run</div></div><div class="tile "><div class="tl">Since start</div><div class="tv">+0.00%</div><div class="ts">of tracking</div></div><div class="tile "><div class="tl">Open positions</div><div class="tv">0</div><div class="ts">open P&amp;L $+0.00</div></div><div class="tile "><div class="tl">Cash</div><div class="tv">$100,000.00</div><div class="ts">uninvested</div></div><div class="tile good"><div class="tl">Last run</div><div class="tv">14 hours ago</div><div class="ts">2 order(s), 0 blocked</div></div></div>
 
   <h2>Account equity</h2>
   <div class="card empty">Not enough history to plot yet. The chart appears after the agent has run on two separate days.</div>

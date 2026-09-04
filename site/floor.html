@@ -1,0 +1,586 @@
+<title>The Sorting Line</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;450;600&family=Martian+Mono:wght@500;700&display=swap">
+<style>
+  /* Deliberately one visual world: an operations floor, dark, read in a dim
+     room or off a projector. Every colour is painted explicitly so the page
+     holds on whatever ground the viewer's theme paints behind it. */
+  :root {
+    color-scheme: dark;
+    --floor:#0e1219;
+    --panel:#161c26;
+    --panel-2:#1c2431;
+    --edge:#232b38;
+    --edge-2:#2f3a4b;
+    --ink:#e8ecf2;
+    --ink-2:#9aa6b8;
+    --muted:#63708a;
+    --flow:#4aa3d8;
+    --flow-dim:#1e3f56;
+    --live:#f0a836;
+    --pass:#4fb783;
+    --cut:#c8574f;
+    --disp:"Martian Mono", ui-monospace, monospace;
+    --sans:"IBM Plex Sans", system-ui, -apple-system, sans-serif;
+    --mono:"IBM Plex Mono", ui-monospace, monospace;
+  }
+
+  * { box-sizing:border-box; }
+  body {
+    margin:0; background:var(--floor); color:var(--ink);
+    font-family:var(--sans); font-size:15px; line-height:1.6;
+    -webkit-text-size-adjust:100%;
+  }
+  .wrap { max-width:1080px; margin:0 auto; padding:22px 18px 64px; }
+
+  .sitenav {
+    display:flex; gap:14px; align-items:center; margin-bottom:14px;
+    font-family:var(--mono); font-size:12px;
+  }
+  .sitenav a { color:var(--muted); text-decoration:none; padding:4px 0; }
+  .sitenav a:hover, .sitenav a:focus-visible { color:var(--flow); }
+  .sitenav .here { color:var(--ink); }
+
+  /* ---------- header strip ---------- */
+  .top {
+    display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+    padding-bottom:16px; border-bottom:1px solid var(--edge);
+  }
+  h1 {
+    font-family:var(--disp); font-weight:700; font-size:17px;
+    letter-spacing:-.02em; margin:0; color:var(--ink);
+  }
+  .tagline { color:var(--muted); font-size:13px; margin:0; flex:1 1 220px; }
+  .clock {
+    font-family:var(--mono); font-size:13px; font-variant-numeric:tabular-nums;
+    color:var(--flow); background:var(--panel); border:1px solid var(--edge-2);
+    padding:5px 11px; border-radius:6px; white-space:nowrap;
+  }
+  .btn {
+    font-family:var(--mono); font-size:12px; color:var(--ink-2);
+    background:var(--panel); border:1px solid var(--edge-2);
+    padding:6px 13px; border-radius:6px; cursor:pointer;
+  }
+  .btn:hover { color:var(--ink); border-color:var(--flow); }
+  .btn:focus-visible { outline:2px solid var(--flow); outline-offset:2px; }
+
+  /* ---------- the floor ---------- */
+  .floorgrid {
+    display:grid; gap:14px; margin-top:18px;
+    grid-template-columns:1fr;
+  }
+  @media (min-width:860px) { .floorgrid { grid-template-columns:238px 1fr 210px; } }
+
+  .rail, .side {
+    background:var(--panel); border:1px solid var(--edge);
+    border-radius:10px; padding:12px;
+  }
+  .rail-h, .side-h {
+    font-family:var(--mono); font-size:10px; letter-spacing:.14em;
+    text-transform:uppercase; color:var(--muted); margin:0 0 10px 2px;
+  }
+
+  /* stations in the left rail */
+  .station {
+    display:flex; align-items:center; gap:10px;
+    padding:7px 9px; border-radius:7px; margin-bottom:3px;
+    border:1px solid transparent; transition:background .3s, border-color .3s;
+  }
+  .station.on { background:var(--panel-2); border-color:var(--live); }
+  .station.done { background:transparent; border-color:var(--edge); }
+  .lamp {
+    width:9px; height:9px; border-radius:50%; flex:none;
+    background:var(--edge-2); transition:background .3s, box-shadow .3s;
+  }
+  .station.on .lamp { background:var(--live); box-shadow:0 0 0 4px rgba(240,168,54,.16); }
+  .station.done .lamp { background:var(--pass); }
+  .st-name { font-size:13.5px; color:var(--ink-2); transition:color .3s; }
+  .station.on .st-name { color:var(--ink); }
+  .station.done .st-name { color:var(--ink-2); }
+  .st-tag {
+    margin-left:auto; font-family:var(--mono); font-size:9.5px;
+    letter-spacing:.08em; text-transform:uppercase; color:var(--muted);
+  }
+  .station.on .st-tag { color:var(--live); }
+  .station.done .st-tag { color:var(--pass); }
+
+  /* the stage */
+  .stagebox {
+    background:var(--panel); border:1px solid var(--edge);
+    border-radius:10px; padding:12px; min-height:614px;
+    display:flex; flex-direction:column;
+  }
+  .stage {
+    position:relative; flex:1; min-height:582px; overflow:hidden;
+    border-radius:7px;
+  }
+  .lane {
+    position:absolute; left:0; right:0; height:1px; background:var(--edge);
+  }
+  .lane-lbl {
+    position:absolute; left:2px; transform:translateY(-13px);
+    font-family:var(--mono); font-size:9.5px; letter-spacing:.1em;
+    text-transform:uppercase; color:var(--muted);
+  }
+  .chute {
+    position:absolute; top:0; bottom:0; right:0; width:74px;
+    background:linear-gradient(90deg, rgba(200,87,79,0) 0%, rgba(200,87,79,.07) 100%);
+    border-left:1px dashed rgba(200,87,79,.28);
+  }
+  .chute-lbl {
+    position:absolute; top:8px; right:6px; width:62px; text-align:right;
+    font-family:var(--mono); font-size:9px; letter-spacing:.08em;
+    text-transform:uppercase; color:var(--cut); opacity:.75; line-height:1.4;
+  }
+
+  .chip {
+    position:absolute; top:0; left:0;
+    font-family:var(--mono); font-size:11px; font-weight:500;
+    color:var(--ink-2); background:var(--panel-2);
+    border:1px solid var(--edge-2); border-radius:5px;
+    padding:3px 7px; white-space:nowrap;
+    transition:transform 1.1s cubic-bezier(.4,.05,.2,1),
+               opacity .7s ease, color .4s, border-color .4s, background .4s;
+    will-change:transform, opacity;
+  }
+  .chip.alive { color:var(--flow); border-color:var(--flow); background:var(--flow-dim); }
+  .chip.cut { color:var(--cut); border-color:rgba(200,87,79,.5); }
+
+  .ticket {
+    position:absolute; top:0; left:0; width:186px;
+    background:var(--panel-2); border:1px solid var(--pass);
+    border-radius:8px; padding:9px 11px; opacity:0;
+    transition:opacity .5s ease, transform .8s cubic-bezier(.4,.05,.2,1);
+    box-shadow:0 6px 22px rgba(0,0,0,.4);
+  }
+  .ticket.show { opacity:1; }
+  .tk-top {
+    display:flex; align-items:baseline; gap:7px;
+    font-family:var(--mono); font-size:12px; color:var(--pass);
+    margin-bottom:6px;
+  }
+  .tk-top b { font-size:13px; }
+  .tk-row {
+    display:flex; justify-content:space-between;
+    font-family:var(--mono); font-size:10.5px; color:var(--ink-2);
+    font-variant-numeric:tabular-nums;
+  }
+
+  .pulse {
+    position:absolute; left:50%; top:0; width:9px; height:9px;
+    border-radius:50%; background:var(--flow); opacity:0;
+    transform:translate(-50%,-4px);
+  }
+  .pulse.go { animation:ring 1s ease-out; }
+  @keyframes ring {
+    0%   { opacity:.9; box-shadow:0 0 0 0 rgba(74,163,216,.5); }
+    100% { opacity:0;  box-shadow:0 0 0 46px rgba(74,163,216,0); }
+  }
+
+  /* right side: counters + log */
+  .counters { display:grid; gap:7px; margin-bottom:14px; }
+  .ctr {
+    display:flex; align-items:baseline; justify-content:space-between;
+    padding:7px 9px; background:var(--panel-2); border-radius:6px;
+    border:1px solid var(--edge);
+  }
+  .ctr span { font-size:11.5px; color:var(--ink-2); }
+  .ctr b {
+    font-family:var(--mono); font-size:16px; font-variant-numeric:tabular-nums;
+    color:var(--ink); font-weight:500;
+  }
+  .ctr.cut b { color:var(--cut); }
+  .ctr.pass b { color:var(--pass); }
+
+  .log {
+    font-family:var(--mono); font-size:10.5px; line-height:1.75;
+    color:var(--ink-2); height:238px; overflow:hidden;
+    display:flex; flex-direction:column; justify-content:flex-end;
+  }
+  .log div { opacity:0; animation:fadein .35s forwards; }
+  .log .t { color:var(--muted); }
+  .log .k { color:var(--flow); }
+  .log .x { color:var(--cut); }
+  .log .g { color:var(--pass); }
+  @keyframes fadein { to { opacity:1; } }
+
+  /* ---------- below the fold ---------- */
+  .note {
+    margin-top:22px; padding:14px 16px; border-radius:9px;
+    background:var(--panel); border:1px solid var(--edge);
+    border-left:3px solid var(--flow);
+    color:var(--ink-2); font-size:14px;
+  }
+  .note b { color:var(--ink); }
+
+  h2 {
+    font-family:var(--disp); font-weight:500; font-size:14px;
+    letter-spacing:-.01em; margin:30px 0 4px; color:var(--ink);
+  }
+  .sub { color:var(--muted); font-size:13.5px; margin:0 0 14px; max-width:64ch; }
+
+  .facts { display:grid; gap:10px; grid-template-columns:repeat(2,1fr); }
+  @media (min-width:720px) { .facts { grid-template-columns:repeat(4,1fr); } }
+  .fact {
+    background:var(--panel); border:1px solid var(--edge);
+    border-radius:9px; padding:13px 15px;
+  }
+  .fact b {
+    display:block; font-family:var(--disp); font-weight:700; font-size:21px;
+    color:var(--flow); letter-spacing:-.03em; margin-bottom:3px;
+  }
+  .fact span { font-size:12px; color:var(--ink-2); line-height:1.45; display:block; }
+
+  footer {
+    margin-top:34px; padding-top:16px; border-top:1px solid var(--edge);
+    color:var(--muted); font-size:12px; line-height:1.7;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .chip, .ticket { transition:none; }
+    .pulse.go { animation:none; }
+    .log div { animation:none; opacity:1; }
+  }
+</style>
+
+<div class="wrap">
+
+  <nav class="sitenav">
+    <a href="./index.html">&larr; Dashboard</a>
+    <span class="here">The Sorting Line</span>
+  </nav>
+
+  <div class="top">
+    <h1>The Sorting Line</h1>
+    <p class="tagline">One weekday run, start to finish. Twenty-six candidates
+    go in.</p>
+    <div class="clock" id="clock">16:29:50 CDT</div>
+    <button class="btn" id="toggle" type="button">Pause</button>
+  </div>
+
+  <div class="floorgrid">
+
+    <!-- left rail: the nine stations -->
+    <div class="rail">
+      <p class="rail-h">Stations</p>
+      <div class="station" data-st="watch">
+        <i class="lamp"></i><span class="st-name">Watchers</span><span class="st-tag">gate</span>
+      </div>
+      <div class="station" data-st="pos">
+        <i class="lamp"></i><span class="st-name">Position manager</span><span class="st-tag">sell</span>
+      </div>
+      <div class="station" data-st="scan">
+        <i class="lamp"></i><span class="st-name">Scanner</span><span class="st-tag">find</span>
+      </div>
+      <div class="station" data-st="rank">
+        <i class="lamp"></i><span class="st-name">Ranker</span><span class="st-tag">off</span>
+      </div>
+      <div class="station" data-st="risk">
+        <i class="lamp"></i><span class="st-name">Risk &amp; sizing</span><span class="st-tag">gate</span>
+      </div>
+      <div class="station" data-st="res">
+        <i class="lamp"></i><span class="st-name">Researcher</span><span class="st-tag">gate</span>
+      </div>
+      <div class="station" data-st="trade">
+        <i class="lamp"></i><span class="st-name">Trader</span><span class="st-tag">act</span>
+      </div>
+      <div class="station" data-st="rec">
+        <i class="lamp"></i><span class="st-name">Recorder</span><span class="st-tag">write</span>
+      </div>
+      <div class="station" data-st="dash">
+        <i class="lamp"></i><span class="st-name">Dashboard</span><span class="st-tag">ship</span>
+      </div>
+    </div>
+
+    <!-- the stage -->
+    <div class="stagebox">
+      <div class="stage" id="stage">
+        <div class="chute"></div>
+        <div class="chute-lbl">rejected</div>
+        <div class="pulse" id="pulse"></div>
+      </div>
+    </div>
+
+    <!-- right: counters and log -->
+    <div class="side">
+      <p class="side-h">This run</p>
+      <div class="counters">
+        <div class="ctr"><span>Scanned</span><b id="c-scan">0</b></div>
+        <div class="ctr"><span>Setups found</span><b id="c-setup">0</b></div>
+        <div class="ctr cut"><span>Blocked</span><b id="c-block">0</b></div>
+        <div class="ctr pass"><span>Orders sent</span><b id="c-order">0</b></div>
+      </div>
+      <p class="side-h">Log</p>
+      <div class="log" id="log"></div>
+    </div>
+
+  </div>
+
+  <div class="note">
+    <b>What you are watching.</b> A scripted replay of one daily run, using the
+    real pipeline and real rules. The tickers and prices are illustrative, not
+    a live feed. The proportions are not: across 7.9 years of backtesting, the
+    rules found 2,285 valid setups and 858 became trades. Almost everything
+    gets thrown off the line, and that is the design working.
+  </div>
+
+  <h2>Measured, not guessed</h2>
+  <p class="sub">Every number below came from running the system against two
+  decades of market data.</p>
+  <div class="facts">
+    <div class="fact"><b>2,285</b><span>valid setups found by the rules</span></div>
+    <div class="fact"><b>858</b><span>became trades after the gates</span></div>
+    <div class="fact"><b>166</b><span>automated checks before it may trade</span></div>
+    <div class="fact"><b>1%</b><span>of the account risked per position</span></div>
+  </div>
+
+  <footer>
+    Paper account. Fake money, real prices, real order mechanics. Nothing here
+    is a prediction, a recommendation, or a claim about future returns.<br>
+    Built by Peyton Chapman &middot; runs itself every weekday at 16:30 Central.
+  </footer>
+</div>
+
+<script>
+(function () {
+  var TICKERS = ["AAPL","MSFT","NVDA","AMZN","GOOGL","META","TSLA","AVGO","AMD",
+                 "NFLX","COST","JPM","V","UNH","XOM","LLY","WMT","CRM","ORCL",
+                 "ADBE","SPY","QQQ","IWM","DIA","XLK","SMH"];
+  var SURVIVORS = ["QQQ","DIA","XLK"];      // reach the risk gate
+  var CUT_RISK  = "XLK";                    // correlated with QQQ
+  var CUT_NEWS  = "DIA";                    // earnings inside the hold window
+  var WINNER    = "QQQ";
+
+  var stage = document.getElementById("stage");
+  var logEl = document.getElementById("log");
+  var clockEl = document.getElementById("clock");
+  var pulseEl = document.getElementById("pulse");
+  var toggle = document.getElementById("toggle");
+
+  var reduced = window.matchMedia &&
+                window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // Lane geometry as fractions of stage height.
+  var LANES = [
+    { y:0.05, label:"candidates" },
+    { y:0.27, label:"scanner" },
+    { y:0.45, label:"risk & sizing" },
+    { y:0.61, label:"researcher" },
+    { y:0.74, label:"trader" }
+  ];
+
+  var chips = {}, ticket = null, W = 0, H = 0;
+  var PER_ROW = 7;   // wider columns: thirteen across overlaps at this width
+
+  function build() {
+    // lanes
+    LANES.forEach(function (L) {
+      var l = document.createElement("div");
+      l.className = "lane"; l.style.top = (L.y * 100) + "%";
+      stage.appendChild(l);
+      var t = document.createElement("div");
+      t.className = "lane-lbl"; t.style.top = (L.y * 100) + "%";
+      t.textContent = L.label;
+      stage.appendChild(t);
+    });
+
+    TICKERS.forEach(function (sym) {
+      var c = document.createElement("div");
+      c.className = "chip"; c.textContent = sym;
+      c.style.opacity = "0";
+      stage.appendChild(c);
+      chips[sym] = c;
+    });
+
+    ticket = document.createElement("div");
+    ticket.className = "ticket";
+    ticket.innerHTML =
+      '<div class="tk-top"><b>QQQ</b><span>buy 34</span></div>' +
+      '<div class="tk-row"><span>entry</span><span>$717.67</span></div>' +
+      '<div class="tk-row"><span>stop</span><span>$703.68</span></div>' +
+      '<div class="tk-row"><span>target</span><span>$745.64</span></div>' +
+      '<div class="tk-row"><span>at risk</span><span>$475.55</span></div>';
+    stage.appendChild(ticket);
+
+    measure();
+  }
+
+  function measure() {
+    W = stage.clientWidth; H = stage.clientHeight;
+  }
+
+  function put(sym, x, y, dur) {
+    var c = chips[sym];
+    if (!c) return;
+    if (dur === 0) c.style.transitionDuration = "0s";
+    c.style.transform = "translate(" + x + "px," + y + "px)";
+    if (dur === 0) { void c.offsetWidth; c.style.transitionDuration = ""; }
+  }
+
+  // Spread the full field across two rows at the top.
+  function spread(lane) {
+    var gapX = (W - 96) / PER_ROW, y0 = H * LANES[lane].y + 12;
+    TICKERS.forEach(function (sym, i) {
+      var row = Math.floor(i / PER_ROW), col = i % PER_ROW;
+      put(sym, 8 + col * gapX, y0 + row * 25, 0);
+      chips[sym].style.opacity = "1";
+    });
+  }
+
+  function moveField(lane) {
+    var gapX = (W - 96) / PER_ROW, y0 = H * LANES[lane].y + 12;
+    TICKERS.forEach(function (sym, i) {
+      var row = Math.floor(i / PER_ROW), col = i % PER_ROW;
+      put(sym, 8 + col * gapX, y0 + row * 25);
+    });
+  }
+
+  function centerRow(list, lane) {
+    var y = H * LANES[lane].y + 12;
+    var span = 62, total = list.length * span;
+    var x0 = ((W - 80) - total) / 2 + 8;
+    list.forEach(function (sym, i) {
+      put(sym, x0 + i * span, y);
+      chips[sym].classList.add("alive");
+    });
+  }
+
+  function eject(list) {
+    list.forEach(function (sym, i) {
+      var c = chips[sym];
+      if (!c) return;
+      c.classList.remove("alive");
+      c.classList.add("cut");
+      setTimeout(function () {
+        var cur = c.style.transform.match(/translate\(([-\d.]+)px,\s*([-\d.]+)px\)/);
+        var y = cur ? parseFloat(cur[2]) : 0;
+        c.style.transform = "translate(" + (W + 40) + "px," + (y + 14) + "px)";
+        c.style.opacity = "0";
+      }, i * 26);
+    });
+  }
+
+  function station(key, state) {
+    var el = document.querySelector('.station[data-st="' + key + '"]');
+    if (!el) return;
+    el.classList.remove("on", "done");
+    if (state) el.classList.add(state);
+  }
+
+  function say(time, text, cls) {
+    var d = document.createElement("div");
+    d.innerHTML = '<span class="t">' + time + '</span>  ' +
+                  '<span class="' + (cls || "") + '">' + text + '</span>';
+    logEl.appendChild(d);
+    while (logEl.children.length > 13) logEl.removeChild(logEl.firstChild);
+  }
+
+  function count(id, v) { document.getElementById(id).textContent = v; }
+
+  function setClock(s) { clockEl.textContent = s; }
+
+  // ---- the run, as a timeline -------------------------------------------
+  var SCRIPT = [
+    [0, function () {
+      logEl.innerHTML = "";
+      ["c-scan","c-setup","c-block","c-order"].forEach(function (i) { count(i, 0); });
+      ["watch","pos","scan","rank","risk","res","trade","rec","dash"]
+        .forEach(function (k) { station(k, null); });
+      TICKERS.forEach(function (s) {
+        chips[s].className = "chip";
+        chips[s].style.opacity = "0";
+      });
+      ticket.classList.remove("show");
+      measure();
+      spread(0);
+      TICKERS.forEach(function (s) { chips[s].style.opacity = "0"; });
+      setClock("16:29:50 CDT");
+    }],
+    [700,  function () { setClock("16:30:00 CDT"); pulseEl.classList.add("go");
+                         say("16:30:00", "github fires the daily run", "k"); }],
+    [1000, function () { pulseEl.classList.remove("go"); station("watch","on"); }],
+    [1300, function () { say("16:30:04", "watchers: prices fresh"); }],
+    [1800, function () { say("16:30:05", "watchers: broker agrees, 0 unprotected"); }],
+    [2300, function () { say("16:30:06", "watchers: last run was yesterday"); }],
+    [2700, function () { station("watch","done"); station("pos","on"); }],
+    [3100, function () { say("16:30:08", "holding nothing, no exits to manage"); }],
+    [3500, function () { station("pos","done"); station("scan","on");
+                         spread(0);
+                         TICKERS.forEach(function (s, i) {
+                           setTimeout(function(){ chips[s].style.opacity = "1"; }, i * 32);
+                         });
+                         say("16:30:09", "scanning 26 symbols", "k"); }],
+    [4600, function () { count("c-scan", 26); moveField(1); }],
+    [6100, function () { say("16:30:21", "23 have no setup today", "x");
+                         eject(TICKERS.filter(function (s) {
+                           return SURVIVORS.indexOf(s) === -1; })); }],
+    [6900, function () { count("c-setup", 3); count("c-block", 23); }],
+    [7400, function () { station("scan","done"); centerRow(SURVIVORS, 1); }],
+    [8000, function () { station("rank","done");
+                         say("16:30:23", "ranker off: tested, no measurable gain"); }],
+    [8600, function () { station("risk","on"); centerRow(SURVIVORS, 2); }],
+    [9700, function () { say("16:30:26", "sizing at 1% of $100,000"); }],
+    [10400, function () { say("16:30:27", "XLK moves 0.96 with QQQ, cut", "x");
+                          eject([CUT_RISK]); count("c-block", 24); }],
+    [11300, function () { station("risk","done"); station("res","on");
+                          centerRow([ "DIA", "QQQ" ], 3); }],
+    [12300, function () { say("16:30:30", "checking earnings calendars"); }],
+    [13000, function () { say("16:30:32", "DIA reports in 6 days, cut", "x");
+                          eject([CUT_NEWS]); count("c-block", 25); }],
+    [14000, function () { station("res","done"); station("trade","on");
+                          centerRow([WINNER], 4); }],
+    [15000, function () {
+        measure();
+        ticket.style.transform = "translate(" + Math.max(8,(W - 80 - 186)/2) +
+                                 "px," + (H * 0.74 + 26) + "px)";
+        ticket.classList.add("show");
+        say("16:30:35", "buy 34 QQQ, bracket attached", "g");
+      }],
+    [16200, function () { count("c-order", 1); station("trade","done");
+                          station("rec","on");
+                          say("16:30:36", "stop $703.68 and target $745.64 working", "g"); }],
+    [17200, function () { say("16:30:37", "wrote agent_state, equity, run_log"); }],
+    [17900, function () { station("rec","done"); station("dash","on"); }],
+    [18600, function () { say("16:30:39", "dashboard published", "k");
+                          station("dash","done"); }],
+    [19400, function () { setClock("16:30:39 CDT  ·  done in 39s");
+                          say("", "1 order from 26 candidates · 25 filtered out", "k"); }],
+    [26000, function () { /* loop */ }]
+  ];
+
+  var t0 = performance.now(), idx = 0, paused = false, pausedAt = 0;
+
+  function frame(now) {
+    if (!paused) {
+      var el = now - t0;
+      while (idx < SCRIPT.length && el >= SCRIPT[idx][0]) {
+        SCRIPT[idx][1]();
+        idx++;
+      }
+      if (idx >= SCRIPT.length) { t0 = now; idx = 0; }
+    }
+    requestAnimationFrame(frame);
+  }
+
+  function finalFrame() {
+    // Reduced motion: show the finished run, no loop.
+    SCRIPT.forEach(function (s) { s[1](); });
+    TICKERS.forEach(function (s) {
+      if (s !== WINNER) chips[s].style.opacity = "0";
+    });
+    toggle.style.display = "none";
+  }
+
+  toggle.addEventListener("click", function () {
+    paused = !paused;
+    toggle.textContent = paused ? "Play" : "Pause";
+    if (paused) pausedAt = performance.now();
+    else t0 += performance.now() - pausedAt;
+  });
+
+  window.addEventListener("resize", measure);
+
+  build();
+  if (reduced) { finalFrame(); }
+  else { requestAnimationFrame(frame); }
+})();
+</script>
