@@ -24,6 +24,11 @@ CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 REQUIRED_COLS = ["open", "high", "low", "close", "volume"]
 
+# How far cached prices may sit from a fresh download of the same dates before
+# the cache is treated as being on a different basis. Rounding moves prices by
+# a hundredth of a percent. A split moves them by half or more.
+ADJUST_TOLERANCE = 0.002
+
 
 class DataError(RuntimeError):
     pass
@@ -31,6 +36,31 @@ class DataError(RuntimeError):
 
 def _cache_path(symbol: str) -> Path:
     return CACHE_DIR / f"{symbol.upper()}.csv"
+
+
+def _read_cache(path: Path) -> Optional[pd.DataFrame]:
+    if not path.exists():
+        return None
+    try:
+        return _normalize(pd.read_csv(path, index_col=0, parse_dates=True))
+    except Exception:
+        return None    # an unreadable cache is not worth failing the run over
+
+
+def _adjustment_drift(old: pd.DataFrame, fresh: pd.DataFrame):
+    """How far apart two frames are on the dates they both cover.
+
+    Returns (largest relative difference, number of shared bars). Zero shared
+    bars means the question cannot be answered, which is itself a reason not
+    to merge the two halves together.
+    """
+    shared = old.index.intersection(fresh.index)
+    if len(shared) == 0:
+        return 0.0, 0
+    a = old.loc[shared, "close"].astype(float)
+    b = fresh.loc[shared, "close"].astype(float)
+    denom = b.abs().clip(lower=1e-9)
+    return float(((a - b).abs() / denom).max()), int(len(shared))
 
 
 def _normalize(df: pd.DataFrame) -> pd.DataFrame:
@@ -126,13 +156,36 @@ def load_bars(symbol: str, start: str = "2015-01-01", end: Optional[str] = None,
         # backtest run tomorrow would silently cover a shorter period than
         # the same command covered today. Data disappearing without an error
         # is the worst kind of bug: nothing breaks, the answers just change.
-        if path.exists():
-            try:
-                old = _normalize(pd.read_csv(path, index_col=0, parse_dates=True))
+        #
+        # Merging is only safe while both halves are quoted on the same basis.
+        # These bars are split and dividend adjusted, so every split and every
+        # dividend rewrites the entire history at the source. Gluing yesterday's
+        # cache onto today's download after a 10-for-1 split would leave a 90%
+        # cliff in the middle of the series, and nothing downstream would call
+        # that an error. The moving averages would simply be wrong, the trend
+        # filter would read a crash, and the agent would act on it. So the two
+        # halves are compared where they overlap before they are joined.
+        old = _read_cache(path)
+        if old is not None and len(old):
+            drift, shared = _adjustment_drift(old, fresh)
+            if shared == 0:
+                reason = "the cache and the download share no dates"
+            elif drift > ADJUST_TOLERANCE:
+                reason = (f"prices differ by {drift * 100:.1f}% on {shared} "
+                          f"shared bar(s), the source has re-adjusted")
+            else:
+                reason = ""
+
+            if reason:
+                # Do not repair the seam, refuse to create one. Re-download the
+                # whole history so every bar comes from one adjustment basis.
+                print(f"  [{symbol}] rebuilding cache: {reason}")
+                floor = str(old.index.min().date())
+                fresh = download_bars(symbol,
+                                      start=min(floor, start or floor), end=end)
+            else:
                 fresh = pd.concat([old, fresh])
                 fresh = fresh[~fresh.index.duplicated(keep="last")].sort_index()
-            except Exception:
-                pass   # unreadable cache is not worth failing the run over
 
         df = fresh
         df.to_csv(path)

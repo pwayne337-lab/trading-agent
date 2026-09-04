@@ -79,7 +79,16 @@ class AlpacaBroker:
             )
 
         url = f"{self.base_url}{path}"
-        resp = requests.request(method, url, headers=self._headers(), timeout=20, **kwargs)
+        try:
+            resp = requests.request(method, url, headers=self._headers(),
+                                    timeout=20, **kwargs)
+        except requests.RequestException as exc:
+            # A dropped connection, a DNS failure, a timeout, a proxy refusing
+            # the tunnel. Every caller already handles BrokerError and falls
+            # back to something sensible; none of them handle a raw urllib
+            # exception, which would end the daily run in a stack trace with no
+            # state saved and no dashboard written.
+            raise BrokerError(f"{method} {path} failed to reach the broker: {exc}") from exc
         if resp.status_code >= 400:
             raise BrokerError(f"{method} {path} -> {resp.status_code}: {resp.text[:400]}")
         return resp.json() if resp.text else {}
@@ -219,24 +228,65 @@ class AlpacaBroker:
         order = self._request("POST", "/v2/orders", json=payload)
         return Fill(symbol, shares, order.get("id", ""), order.get("status", "?"), True)
 
-    def cancel_orders_for(self, symbol: str) -> int:
-        """Cancel every working order on one symbol. Returns how many.
+    def cancel_orders_for(self, symbol: str) -> List[dict]:
+        """Cancel every working order on one symbol. Returns what was cancelled.
 
         Needed before closing a position: the bracket's stop and target legs
         are themselves orders that reserve the shares, so a close attempt
         while they are alive is rejected for insufficient quantity.
+
+        The cancelled orders come back rather than a count because between the
+        cancel and the close the position is standing there with no exit behind
+        it. If the close then fails, this is the only record of what the stop
+        used to be, and it is what makes putting it back possible.
         """
         if self.dry_run:
-            return 0
-        n = 0
+            return []
+        killed: List[dict] = []
         for o in self.open_orders():
             if o.get("symbol") == symbol and o.get("id"):
                 try:
                     self._request("DELETE", f"/v2/orders/{o['id']}")
-                    n += 1
+                    killed.append(o)
                 except BrokerError:
                     pass   # already filled or cancelled between list and delete
-        return n
+        return killed
+
+    def _restore_stop(self, symbol: str, cancelled: List[dict]) -> bool:
+        """Put a protective stop back after a close attempt failed.
+
+        Best effort by design. It runs in the one situation the whole system
+        exists to avoid, so it tries the simplest order that can work and
+        reports honestly whether it got one in.
+        """
+        stop_price, qty = None, 0
+        for o in cancelled:
+            if not str(o.get("side", "")).startswith("sell"):
+                continue
+            raw = o.get("stop_price")
+            if raw in (None, ""):
+                continue
+            try:
+                stop_price = float(raw)
+                qty = abs(int(float(o.get("qty") or 0)))
+            except (TypeError, ValueError):
+                continue
+            break
+
+        if stop_price is None or qty < 1:
+            return False
+        try:
+            self._request("POST", "/v2/orders", json={
+                "symbol": symbol,
+                "qty": str(qty),
+                "side": "sell",
+                "type": "stop",
+                "stop_price": round(stop_price, 2),
+                "time_in_force": "gtc",
+            })
+            return True
+        except BrokerError:
+            return False
 
     def entry_dates(self) -> Dict[str, str]:
         """Most recent buy-fill date per symbol, for the time stop."""
@@ -262,8 +312,24 @@ class AlpacaBroker:
             raise BrokerError("refusing to close a LIVE position without both safety flags")
         if self.dry_run:
             return Fill(symbol, 0, "", "dry-run", False, f"would close {symbol}")
-        self.cancel_orders_for(symbol)
-        order = self._request("DELETE", f"/v2/positions/{symbol}")
+
+        cancelled = self.cancel_orders_for(symbol)
+        try:
+            order = self._request("DELETE", f"/v2/positions/{symbol}")
+        except BrokerError as exc:
+            # The stops were just cancelled and the shares are still held. This
+            # is the unprotected window, and it stays open until something puts
+            # an exit back, so try before reporting.
+            restored = self._restore_stop(symbol, cancelled)
+            raise BrokerError(
+                f"could not close {symbol}: {exc}. "
+                + ("The original stop was put back, so the position is "
+                   "protected but still open."
+                   if restored else
+                   f"WARNING: {symbol} is now held with no stop order behind "
+                   f"it. Close it by hand or set a stop.")
+            ) from exc
+
         return Fill(symbol, int(float(order.get("qty", 0))), order.get("id", ""),
                     order.get("status", "?"), True)
 

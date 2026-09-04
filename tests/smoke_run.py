@@ -59,6 +59,9 @@ class FakeBroker:
     def open_orders(self):
         return list(self._orders)
 
+    def clock(self):
+        return {"is_open": False}
+
     def entry_dates(self):
         return {p["symbol"]: "2020-01-02" for p in self._positions}
 
@@ -159,9 +162,10 @@ def build_bars():
             "FLAT": _end_today(make_series(n=500, seed=12, drift=0.0, vol=0.006))}
 
 
-def run(positions, orders, submit=True):
+def run(positions, orders, submit=True, broker=None):
     bars = build_bars()
-    broker = FakeBroker(positions, orders, dry_run=not submit)
+    if broker is None:
+        broker = FakeBroker(positions, orders, dry_run=not submit)
 
     agent_mod.AlpacaBroker = lambda **kw: broker
     datamod.load_universe = lambda syms, start=None, end=None, refresh=False: bars
@@ -278,6 +282,71 @@ html = dashboard.build_html(state=st, history=state_mod.load_equity_history())
 check("the dashboard renders from that record", "<html" in html and "PAPER" in html)
 
 # ---------------------------------------------------------------------------
+print("\nE2. One broker failure does not take the whole run down")
+# ---------------------------------------------------------------------------
+# A run that dies partway through is worse than a run that does nothing: state
+# is never saved, the dashboard still shows yesterday as current, and the
+# remaining positions go unmanaged with no error anywhere a person would see.
+
+from tbot.broker import BrokerError as _BE
+
+
+class RejectingBroker(FakeBroker):
+    """The broker refuses every buy, the way it would on a halted symbol or
+    with the buying power already spent."""
+    def submit_bracket(self, symbol, shares, stop, target, allow_live=False,
+                       acknowledged=False):
+        raise _BE("POST /v2/orders -> 403: insufficient buying power")
+
+
+b, st = run(positions=[], orders=[], broker=RejectingBroker([], []))
+check("a rejected order is recorded rather than crashing the run",
+      any("rejected" in e for e in st["errors"]), str(st["errors"]))
+check("the run still finished and saved its state", bool(st.get("updated_at")))
+check("the rejected symbol is listed as skipped, with the reason",
+      any("broker rejected" in x.get("reason", "") for x in st["skipped"]),
+      str(st["skipped"]))
+check("nothing is recorded as an order that was never accepted",
+      st["orders"] == [], str(st["orders"]))
+
+
+class FailingExitBroker(FakeBroker):
+    """The close fails, which is the moment a position is least protected."""
+    def close_position(self, symbol, allow_live=False, acknowledged=False):
+        raise _BE(f"could not close {symbol}: 422. WARNING: {symbol} is now "
+                  f"held with no stop order behind it.")
+
+
+_pos = [{"symbol": "DOWNTREND", "shares": 10, "avg_entry": 100.0,
+         "market_value": 700.0, "unrealized_pl": -300.0}]
+b, st = run(positions=_pos, orders=[], broker=FailingExitBroker(list(_pos), []))
+check("a failed exit is recorded rather than crashing the run",
+      any("could not close" in e for e in st["errors"]), str(st["errors"]))
+check("the failed exit run still saved its state", bool(st.get("updated_at")))
+check("the run is marked unhealthy after a failed exit", st["healthy"] is False)
+
+
+# ---------------------------------------------------------------------------
+print("\nE3. An unfinished bar is not tradeable")
+# ---------------------------------------------------------------------------
+# Every decision reads the most recent daily close. During the session that
+# close has not happened yet, so a mid-day run would size entries and trigger
+# exits off a number that is still moving.
+
+class OpenMarketBroker(FakeBroker):
+    def clock(self):
+        return {"is_open": True}
+
+
+b, st = run(positions=[], orders=[], broker=OpenMarketBroker([], []))
+check("no orders are sent while the market is still open",
+      b.submitted == [], str(b.submitted))
+check("nothing is closed on an unfinished bar either", b.closed == [], str(b.closed))
+check("the mid-session run says why it stopped",
+      any("market hours" in e for e in st["errors"]), str(st["errors"]))
+
+
+# ---------------------------------------------------------------------------
 print("\nF. The watchers refuse to trade on a broken picture")
 # ---------------------------------------------------------------------------
 
@@ -306,10 +375,41 @@ _naked = watch.check_broker(_acct, [{"symbol": "AAA", "market_value": 5_000}], [
 check("a position with no sell order is critical",
       any(x.severity == watch.CRITICAL and "UNPROTECTED" in x.message for x in _naked))
 
-_ok = watch.check_broker(_acct, [{"symbol": "AAA", "market_value": 5_000}],
-                         [{"symbol": "AAA", "side": "sell", "id": "1"}])
+_ok = watch.check_broker(
+    _acct, [{"symbol": "AAA", "shares": 10, "market_value": 5_000}],
+    [{"symbol": "AAA", "side": "sell", "id": "1", "qty": "10", "stop_price": "90"}])
 check("a properly protected position raises nothing critical",
       not [x for x in _ok if x.severity == watch.CRITICAL], str(_ok))
+
+# A bracket has two sell legs and only one of them is an exit. Counting sell
+# orders instead of reading them would call this position protected.
+_limit_only = watch.check_broker(
+    _acct, [{"symbol": "AAA", "shares": 10, "market_value": 5_000}],
+    [{"symbol": "AAA", "side": "sell", "id": "1", "qty": "10", "limit_price": "120"}])
+check("a take-profit limit alone is not treated as protection",
+      any(x.severity == watch.CRITICAL and "UNPROTECTED" in x.message
+          for x in _limit_only), str(_limit_only))
+
+_partial = watch.check_broker(
+    _acct, [{"symbol": "AAA", "shares": 10, "market_value": 5_000}],
+    [{"symbol": "AAA", "side": "sell", "id": "1", "qty": "4", "stop_price": "90"}])
+check("a stop covering only part of the position is critical",
+      any(x.severity == watch.CRITICAL and "PARTLY UNPROTECTED" in x.message
+          for x in _partial), str(_partial))
+
+_nested = watch.check_broker(
+    _acct, [{"symbol": "AAA", "shares": 10, "market_value": 5_000}],
+    [{"symbol": "AAA", "side": "buy", "id": "p", "legs": [
+        {"symbol": "AAA", "side": "sell", "id": "l1", "qty": "10", "stop_price": "90"}]}])
+check("a stop nested under its parent order still counts",
+      not [x for x in _nested if x.severity == watch.CRITICAL], str(_nested))
+
+check("a held position with no price data is critical",
+      any(x.severity == watch.CRITICAL for x in
+          watch.check_positions_have_data([{"symbol": "GONE"}], build_bars())))
+check("a held position that does have data is fine",
+      not watch.check_positions_have_data(
+          [{"symbol": sorted(build_bars())[0]}], build_bars()))
 
 check("blocked trading at the broker is critical",
       any(x.severity == watch.CRITICAL for x in
@@ -317,7 +417,8 @@ check("blocked trading at the broker is critical",
 check("an oversized position is flagged even though no rule created it",
       any("of the account" in x.message for x in
           watch.check_broker(_acct, [{"symbol": "AAA", "market_value": 50_000}],
-                             [{"symbol": "AAA", "side": "sell", "id": "1"}])))
+                             [{"symbol": "AAA", "side": "sell", "id": "1",
+                               "qty": "10", "stop_price": "90"}])))
 
 _old = {"updated_at": "2026-01-01T00:00:00+00:00", "positions": []}
 check("a schedule that stopped firing is critical",

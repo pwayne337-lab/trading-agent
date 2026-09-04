@@ -184,6 +184,24 @@ def cmd_run(args):
 
     equity, cash = acct["equity"], acct["cash"]
 
+    # Every decision below reads the most recent daily bar. While the market is
+    # open that bar is half a day old and still moving, so a close that has not
+    # happened yet would set the trend filter, the entries and the exits. The
+    # backtest never sees a partial bar and neither should this. A run during
+    # the session reports and stops.
+    try:
+        market_open = bool(broker.clock().get("is_open"))
+    except (BrokerError, AttributeError):
+        market_open = False        # cannot tell, so do not block the run
+    if market_open and not getattr(args, "ignore_session", False):
+        print("The market is open, so today's bar is not finished yet.\n"
+              "This agent trades on completed daily bars. Run it after the "
+              "close, or pass --ignore-session to override.")
+        st["errors"].append("run attempted during market hours")
+        state.save_state(st)
+        write_dashboard()
+        return
+
     # Count orders that are accepted but not yet filled as already owned.
     # Without this, a second run before the market opens submits the same
     # trade again and silently doubles the risk on it.
@@ -266,8 +284,15 @@ def cmd_run(args):
         if not reason:
             continue
 
-        fill = broker.close_position(sym, allow_live=cfg.allow_live_trading,
-                                     acknowledged=args.i_understand_the_risk)
+        try:
+            fill = broker.close_position(sym, allow_live=cfg.allow_live_trading,
+                                         acknowledged=args.i_understand_the_risk)
+        except BrokerError as exc:
+            # One symbol failing to close is not a reason to abandon the other
+            # positions, skip the dashboard, and leave no record of the run.
+            print(f"  {sym}: EXIT FAILED, {exc}")
+            st["errors"].append(f"could not close {sym}: {exc}")
+            continue
         print(f"  {sym}: CLOSING, {reason}")
         st["exits"].append({"symbol": sym, "reason": reason,
                             "status": fill.status,
@@ -334,11 +359,20 @@ def cmd_run(args):
         st["signals"].append({"symbol": sym, "entry": order.entry, "stop": order.stop,
                               "target": order.target, "shares": order.shares})
 
-        fill = broker.submit_bracket(
-            sym, order.shares, order.stop, order.target,
-            allow_live=cfg.allow_live_trading,
-            acknowledged=args.i_understand_the_risk,
-        )
+        try:
+            fill = broker.submit_bracket(
+                sym, order.shares, order.stop, order.target,
+                allow_live=cfg.allow_live_trading,
+                acknowledged=args.i_understand_the_risk,
+            )
+        except BrokerError as exc:
+            # Insufficient buying power, a halted symbol, a wash trade block.
+            # The broker refuses one order; the run continues to the next
+            # candidate and still writes its state and its dashboard.
+            print(f"  {sym}: REJECTED by the broker, {exc}")
+            st["errors"].append(f"order rejected for {sym}: {exc}")
+            st["skipped"].append({"symbol": sym, "reason": f"broker rejected: {exc}"})
+            continue
         print(f"  {sym}: {fill.status} {fill.detail or ''} "
               f"({order.shares} sh, risking ${order.dollars_at_risk:,.2f})")
         committed.add(sym)
@@ -578,6 +612,9 @@ def main():
                         help="skip the earnings filter and news review")
         pa.add_argument("--i-understand-the-risk", action="store_true",
                         help="third safety lock, required only for live accounts")
+        pa.add_argument("--ignore-session", action="store_true",
+                        help="run even while the market is open, on an "
+                             "unfinished bar (for testing only)")
         pa.set_defaults(func=cmd_run)
 
     cp = sub.add_parser("compare", help="race several strategies against each other")

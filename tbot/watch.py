@@ -109,6 +109,68 @@ def check_data(bars: Dict[str, pd.DataFrame], expected: List[str],
 # 2. Reconciliation
 # ---------------------------------------------------------------------------
 
+def _flatten_orders(open_orders) -> List[dict]:
+    """Bracket legs arrive nested under the parent until it fills. Flatten so
+    a leg is never missed just because of where the broker put it."""
+    flat: List[dict] = []
+    for o in (open_orders or []):
+        if not isinstance(o, dict):
+            continue
+        flat.append(o)
+        for leg in (o.get("legs") or []):
+            if isinstance(leg, dict):
+                flat.append(leg)
+    return flat
+
+
+def _stop_coverage(open_orders):
+    """Shares covered by a working stop, per symbol, and every symbol with any
+    sell order at all.
+
+    Only a stop counts as protection. A take-profit limit sitting above the
+    market is not an exit, it is a wish, and both legs of a bracket are sell
+    orders. Counting sell orders instead of reading their type is how an
+    unprotected position gets reported as safe.
+    """
+    stop_qty: Dict[str, int] = {}
+    sells: Dict[str, int] = {}
+    for o in _flatten_orders(open_orders):
+        sym = o.get("symbol")
+        if not sym or not str(o.get("side", "")).startswith("sell"):
+            continue
+        if str(o.get("status", "")).lower() in ("canceled", "cancelled", "filled",
+                                                "expired", "rejected"):
+            continue
+        sells[sym] = sells.get(sym, 0) + 1
+        if o.get("stop_price") in (None, ""):
+            continue
+        try:
+            qty = abs(int(float(o.get("qty") or 0)))
+        except (TypeError, ValueError):
+            qty = 0
+        stop_qty[sym] = stop_qty.get(sym, 0) + qty
+    return stop_qty, sells
+
+
+def check_positions_have_data(positions: List[dict], bars: Dict[str, pd.DataFrame]
+                              ) -> List[Finding]:
+    """Every held position needs live bars or it cannot be managed.
+
+    The daily exits read the latest close. A position whose data failed to load
+    is skipped by that loop without a word, so a delisted or renamed ticker
+    would sit in the account with nothing evaluating it while the agent goes on
+    opening new trades.
+    """
+    blind = sorted(p["symbol"] for p in (positions or [])
+                   if p.get("symbol")
+                   and (bars.get(p["symbol"]) is None or len(bars.get(p["symbol"], [])) < 2))
+    if not blind:
+        return []
+    return [Finding(CRITICAL, "data",
+                    f"holding {', '.join(blind)} with no usable price data. "
+                    f"The daily exits cannot run on these positions.")]
+
+
 def check_broker(account: dict, positions: List[dict], open_orders: List[dict],
                  believed: Optional[List[dict]] = None) -> List[Finding]:
     """Does the broker's reality match what the agent thinks is true?
@@ -123,17 +185,35 @@ def check_broker(account: dict, positions: List[dict], open_orders: List[dict],
     out: List[Finding] = []
 
     held = {p.get("symbol") for p in (positions or []) if p.get("symbol")}
-    sells: Dict[str, int] = {}
-    for o in (open_orders or []):
-        if str(o.get("side", "")).startswith("sell") and o.get("symbol"):
-            sells[o["symbol"]] = sells.get(o["symbol"], 0) + 1
+    shares_held: Dict[str, int] = {}
+    for p in (positions or []):
+        if p.get("symbol") and p.get("shares") is not None:
+            try:
+                shares_held[p["symbol"]] = abs(int(float(p["shares"])))
+            except (TypeError, ValueError):
+                pass
 
-    naked = sorted(s for s in held if sells.get(s, 0) == 0)
+    stop_qty, sells = _stop_coverage(open_orders)
+
+    naked = sorted(s for s in held if s not in stop_qty)
     if naked:
         out.append(Finding(CRITICAL, "reconcile",
                            f"UNPROTECTED: no stop order behind "
                            f"{', '.join(naked)}. These positions have no exit "
                            f"working at the broker."))
+
+    # A stop that covers part of the position is the failure a count of orders
+    # cannot see. A partly filled entry, or a stop cancelled and replaced at
+    # the wrong size, leaves shares exposed behind an order that looks present.
+    short = []
+    for sym, covered in stop_qty.items():
+        owned = shares_held.get(sym)
+        if owned and covered and covered < owned:
+            short.append(f"{sym} ({covered} of {owned} sh)")
+    if short:
+        out.append(Finding(CRITICAL, "reconcile",
+                           f"PARTLY UNPROTECTED: the stop covers fewer shares "
+                           f"than are held: {', '.join(short)}"))
 
     orphan = sorted(s for s in sells if s not in held)
     if orphan:
@@ -217,6 +297,7 @@ def run_all(bars, expected, account, positions, open_orders,
     findings += check_data(bars, expected)
     findings += check_broker(account, positions, open_orders,
                              believed=(previous_state or {}).get("positions"))
+    findings += check_positions_have_data(positions, bars)
     order = {CRITICAL: 0, WARNING: 1, INFO: 2}
     findings.sort(key=lambda f: order.get(f.severity, 3))
     return findings

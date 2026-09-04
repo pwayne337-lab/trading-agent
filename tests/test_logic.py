@@ -498,7 +498,148 @@ _reload = datamod.load_bars("ZZZ", start="1990-01-01")
 check("the merged history is what actually got written to disk",
       len(_reload) == len(_long), f"{len(_reload)} on disk")
 
+
+# ---------------------------------------------------------------------------
+print("\n7b-ii. A split must rebuild the cache, not create a cliff in it")
+# ---------------------------------------------------------------------------
+# Bars are split and dividend adjusted, so a split rewrites the entire history
+# at the source. Yesterday's cache and today's download are then quoted on
+# different bases, and concatenating them leaves a fake 90% crash in the middle
+# of the series. Nothing downstream would call that an error. The moving
+# averages would just be wrong and the agent would trade on them.
+
+_pre = make_series(n=900, seed=91)                    # cached before the split
+_post = (_pre.tail(120) / 10.0)                       # same bars, 10-for-1 split
+_post["volume"] = _pre.tail(120)["volume"] * 10
+
+datamod._cache_path("SPLIT").parent.mkdir(parents=True, exist_ok=True)
+_pre.to_csv(datamod._cache_path("SPLIT"))
+
+_full_post = _pre / 10.0                              # what a re-download returns
+_full_post["volume"] = _pre["volume"] * 10
+
+_calls = []
+def _counting_download(sym, start=None, end=None, retries=3):
+    _calls.append(start)
+    return _post.copy() if len(_calls) == 1 else _full_post.copy()
+
+_real_download = datamod.download_bars
+datamod.download_bars = _counting_download
+_healed = datamod.load_bars("SPLIT", start="1990-01-01", refresh=True)
+datamod.download_bars = _real_download
+
+check("a re-adjusted download triggers a second, full download",
+      len(_calls) == 2, f"{len(_calls)} download(s)")
+check("the rebuilt history keeps its full length",
+      len(_healed) == len(_pre), f"{len(_healed)} bars, expected {len(_pre)}")
+
+_jump = _healed["close"].pct_change().abs().max()
+check("the rebuilt series has no split-sized cliff in it",
+      _jump < 0.5, f"largest one-day move {_jump*100:.0f}%")
+check("the rebuilt series is on the new price basis",
+      abs(float(_healed["close"].iloc[-1]) - float(_full_post["close"].iloc[-1])) < 1e-6)
+
+# The tolerance must be tight enough to catch a split and loose enough to
+# ignore rounding, or it either never fires or fires every single day.
+_rounded = _pre.copy()
+_rounded["close"] = (_rounded["close"] * 1.0001)
+_drift, _shared = datamod._adjustment_drift(_rounded, _pre)
+check("a rounding-sized difference is not treated as a re-adjustment",
+      _drift <= datamod.ADJUST_TOLERANCE, f"drift {_drift}")
+_drift2, _ = datamod._adjustment_drift(_pre, _full_post)
+check("a split-sized difference is treated as a re-adjustment",
+      _drift2 > datamod.ADJUST_TOLERANCE, f"drift {_drift2}")
+
+# Two halves that share no dates cannot be checked against each other, so
+# joining them is a guess. It must rebuild instead.
+_gap_calls = []
+def _gap_download(sym, start=None, end=None, retries=3):
+    _gap_calls.append(start)
+    return _pre.tail(50).copy() if len(_gap_calls) == 1 else _pre.copy()
+
+_pre.head(200).to_csv(datamod._cache_path("GAP"))
+datamod.download_bars = _gap_download
+_gapped = datamod.load_bars("GAP", start="1990-01-01", refresh=True)
+datamod.download_bars = _real_download
+check("a cache that does not overlap the download is rebuilt, not glued on",
+      len(_gap_calls) == 2, f"{len(_gap_calls)} download(s)")
+
 datamod.CACHE_DIR = _cache_backup
+
+
+# ---------------------------------------------------------------------------
+print("\n7b-iii. A failed close must not leave a position without a stop")
+# ---------------------------------------------------------------------------
+from tbot.broker import AlpacaBroker, BrokerError as _BErr
+
+class _FlakyBroker(AlpacaBroker):
+    """The close fails after the stops have already been cancelled."""
+    def __init__(self, restore_ok=True):
+        super().__init__(key="k", secret="s", dry_run=False)
+        self.restore_ok = restore_ok
+        self.posted = []
+    def open_orders(self):
+        return [{"symbol": "AAA", "id": "stop1", "side": "sell",
+                 "qty": "10", "stop_price": "90.00"},
+                {"symbol": "AAA", "id": "tp1", "side": "sell",
+                 "qty": "10", "limit_price": "120.00"}]
+    def _request(self, method, path, **kw):
+        if method == "DELETE" and path.startswith("/v2/orders/"):
+            return {}
+        if method == "DELETE" and path.startswith("/v2/positions/"):
+            raise _BErr("DELETE /v2/positions/AAA -> 422: insufficient qty")
+        if method == "POST" and path == "/v2/orders":
+            if not self.restore_ok:
+                raise _BErr("POST /v2/orders -> 403: forbidden")
+            self.posted.append(kw.get("json"))
+            return {"id": "restored"}
+        raise AssertionError(f"unexpected call {method} {path}")
+
+_flaky = _FlakyBroker(restore_ok=True)
+try:
+    _flaky.close_position("AAA")
+    _raised = ""
+except _BErr as exc:
+    _raised = str(exc)
+check("a failed close is reported rather than swallowed", "could not close" in _raised)
+check("the original stop is put back when the close fails",
+      len(_flaky.posted) == 1 and _flaky.posted[0]["stop_price"] == 90.0,
+      str(_flaky.posted))
+check("the restored order is a stop for the full size",
+      _flaky.posted[0]["type"] == "stop" and _flaky.posted[0]["qty"] == "10")
+check("the message says the position is protected", "put back" in _raised)
+
+_flaky2 = _FlakyBroker(restore_ok=False)
+try:
+    _flaky2.close_position("AAA")
+    _raised2 = ""
+except _BErr as exc:
+    _raised2 = str(exc)
+check("when the stop cannot be restored the message says so, loudly",
+      "no stop order behind" in _raised2, _raised2)
+
+check("cancel_orders_for reports what it cancelled, not just how many",
+      isinstance(_FlakyBroker().cancel_orders_for("AAA"), list))
+
+# A network failure must arrive as the error type every caller already handles.
+# Raw urllib exceptions escape every try/except in the agent and end the daily
+# run in a stack trace: no state saved, no dashboard written, no record that
+# anything went wrong.
+import requests as _rq
+class _OfflineBroker(AlpacaBroker):
+    def __init__(self):
+        super().__init__(key="k", secret="s", dry_run=False)
+_offline = _OfflineBroker()
+_offline.base_url = "https://127.0.0.1:1"
+try:
+    _offline.account()
+    _net = "no error raised"
+except _BErr as exc:
+    _net = "BrokerError"
+except Exception as exc:
+    _net = type(exc).__name__
+check("a network failure is raised as a BrokerError, not a raw urllib error",
+      _net == "BrokerError", _net)
 
 
 # ---------------------------------------------------------------------------
