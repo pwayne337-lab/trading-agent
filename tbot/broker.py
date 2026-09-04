@@ -228,6 +228,43 @@ class AlpacaBroker:
         order = self._request("POST", "/v2/orders", json=payload)
         return Fill(symbol, shares, order.get("id", ""), order.get("status", "?"), True)
 
+    def submit_stop(self, symbol: str, shares: int, stop: float,
+                    allow_live: bool = False, acknowledged: bool = False) -> Fill:
+        """Put a plain protective stop behind a position that has none.
+
+        Good til cancelled and on its own, not as a bracket leg, because there
+        is no entry to attach it to. A stop is also one of the few orders a
+        broker will accept outside market hours: it rests until price reaches
+        it, so a position found unprotected in the evening can be covered that
+        evening instead of spending the night naked.
+        """
+        if self.is_live:
+            if not allow_live:
+                raise BrokerError(
+                    "refusing to trade a LIVE account: allow_live_trading is False in config")
+            if not acknowledged:
+                raise BrokerError(
+                    "refusing to trade a LIVE account: pass --i-understand-the-risk")
+
+        if shares < 1:
+            return Fill(symbol, 0, "", "rejected", False, "share count below 1")
+        if stop <= 0:
+            return Fill(symbol, 0, "", "rejected", False, "stop price is not positive")
+
+        if self.dry_run:
+            return Fill(symbol, shares, "", "dry-run", False,
+                        f"would protect {shares} {symbol} with a stop at {stop:.2f}")
+
+        order = self._request("POST", "/v2/orders", json={
+            "symbol": symbol,
+            "qty": str(shares),
+            "side": "sell",
+            "type": "stop",
+            "stop_price": round(stop, 2),
+            "time_in_force": "gtc",
+        })
+        return Fill(symbol, shares, order.get("id", ""), order.get("status", "?"), True)
+
     def cancel_orders_for(self, symbol: str) -> List[dict]:
         """Cancel every working order on one symbol. Returns what was cancelled.
 

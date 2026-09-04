@@ -262,6 +262,45 @@ def cmd_run(args):
         st["errors"] += [f.message for f in criticals]
         print("Critical checks failed. No new positions will be opened this run.\n")
 
+    # --- put a stop behind anything that has none, before anything else -----
+    # Detecting an unprotected position and then only writing it down leaves it
+    # unprotected. Nothing else in the run fixes it either: the entry path only
+    # opens new trades, and the exit path waits for a close below an average
+    # that may be days away. So the repair happens here, first, ahead of the
+    # decision to stop trading on a critical finding, because the position is
+    # exposed for exactly as long as nobody acts.
+    #
+    # The level is two ATRs below the last close. That is the same distance the
+    # breakout rules use, it cannot sit above the market and fire instantly,
+    # and it is wide enough to survive ordinary noise. It is a guess, but a
+    # documented one, and a guessed stop beats no stop.
+    exposed = watch.unprotected(positions, orders_open)
+    for sym, shares in sorted(exposed.items()):
+        df = bars.get(sym)
+        if df is None or len(df) < cfg.strategy.atr_period + 2:
+            st["errors"].append(f"cannot protect {sym}: no usable price data")
+            continue
+        prepared = prepare(df, cfg.strategy)
+        last = prepared.iloc[-1]
+        atr_val = float(last["atr"]) if not pd.isna(last["atr"]) else 0.0
+        close = float(last["close"])
+        if atr_val <= 0 or close <= 0:
+            st["errors"].append(f"cannot protect {sym}: no usable ATR")
+            continue
+        level = round(close - 2.0 * atr_val, 2)
+        try:
+            fill = broker.submit_stop(sym, shares, level,
+                                      allow_live=cfg.allow_live_trading,
+                                      acknowledged=args.i_understand_the_risk)
+        except BrokerError as exc:
+            print(f"  {sym}: COULD NOT PROTECT, {exc}")
+            st["errors"].append(f"could not place a stop on {sym}: {exc}")
+            continue
+        print(f"  {sym}: PROTECTED, stop on {shares} sh at ${level:,.2f} "
+              f"({fill.status})")
+        st["protected"].append({"symbol": sym, "shares": shares, "stop": level,
+                                "status": fill.status})
+
     # --- manage what is already open, before looking for anything new -------
     # The stop and target are live at the broker and need no help. These two
     # exits depend on the daily close, so nothing but this run can act on them.

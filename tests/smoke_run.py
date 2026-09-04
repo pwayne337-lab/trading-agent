@@ -47,6 +47,7 @@ class FakeBroker:
         self.submitted = []
         self.closed = []
         self.cancelled = []
+        self.protected = []
 
     def account(self):
         return {"equity": 100_000.0, "cash": 100_000.0, "buying_power": 200_000.0,
@@ -61,6 +62,14 @@ class FakeBroker:
 
     def clock(self):
         return {"is_open": False}
+
+    def submit_stop(self, symbol, shares, stop, allow_live=False, acknowledged=False):
+        if self.dry_run:
+            return Fill(symbol, shares, "", "dry-run", False, f"would protect {symbol}")
+        self.protected.append({"symbol": symbol, "shares": shares, "stop": stop})
+        self._orders.append({"symbol": symbol, "side": "sell", "id": "stop-" + symbol,
+                             "qty": str(shares), "stop_price": str(stop)})
+        return Fill(symbol, shares, "id", "accepted", True)
 
     def entry_dates(self):
         return {p["symbol"]: "2020-01-02" for p in self._positions}
@@ -280,6 +289,46 @@ check("a clean run produces no critical findings",
 from tbot import dashboard
 html = dashboard.build_html(state=st, history=state_mod.load_equity_history())
 check("the dashboard renders from that record", "<html" in html and "PAPER" in html)
+
+# ---------------------------------------------------------------------------
+print("\nE1b. An unprotected position gets a stop, it is not just reported")
+# ---------------------------------------------------------------------------
+# Writing "UNPROTECTED" into a log and moving on leaves the position exactly
+# as exposed as it was. Nothing else in the run covers it: entries only open
+# new trades and the soft exits wait for a close that may be days away.
+
+_naked_pos = [{"symbol": "UP", "shares": 10, "avg_entry": 100.0,
+               "market_value": 1_000.0, "unrealized_pl": 0.0}]
+b, st = run(positions=_naked_pos, orders=[])
+check("a stop was actually placed, not merely noted",
+      [p["symbol"] for p in b.protected] == ["UP"], str(b.protected))
+check("the stop covers every share held",
+      b.protected and b.protected[0]["shares"] == 10, str(b.protected))
+check("the stop sits below the market, so it cannot fire on submission",
+      b.protected and b.protected[0]["stop"] < 100.0 * 5, str(b.protected))
+check("the repair is recorded in state", len(st.get("protected") or []) == 1,
+      str(st.get("protected")))
+check("the watcher still reported the problem it fixed",
+      any("UNPROTECTED" in f["message"] for f in st["findings"]))
+
+# A position that already has a full stop must not collect a second one.
+_covered = run(
+    positions=[{"symbol": "UP", "shares": 10, "avg_entry": 100.0,
+                "market_value": 1_000.0, "unrealized_pl": 0.0}],
+    orders=[{"symbol": "UP", "side": "sell", "id": "s1", "qty": "10",
+             "stop_price": "90"}])[0]
+check("a position that is already protected is left alone",
+      _covered.protected == [], str(_covered.protected))
+
+# Half a stop is still an exposure, and only the uncovered shares need cover.
+_half = run(
+    positions=[{"symbol": "UP", "shares": 10, "avg_entry": 100.0,
+                "market_value": 1_000.0, "unrealized_pl": 0.0}],
+    orders=[{"symbol": "UP", "side": "sell", "id": "s1", "qty": "4",
+             "stop_price": "90"}])[0]
+check("a partly covered position gets a stop for the remaining shares only",
+      _half.protected and _half.protected[0]["shares"] == 6, str(_half.protected))
+
 
 # ---------------------------------------------------------------------------
 print("\nE2. One broker failure does not take the whole run down")

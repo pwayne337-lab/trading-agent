@@ -152,6 +152,29 @@ def _stop_coverage(open_orders):
     return stop_qty, sells
 
 
+def unprotected(positions: List[dict], open_orders) -> Dict[str, int]:
+    """Held symbols with no stop, or a stop too small, and how many shares are
+    exposed. Same reading of the orders the watcher uses, so the report and the
+    repair can never disagree about what counts as protected.
+    """
+    stop_qty, _ = _stop_coverage(open_orders)
+    out: Dict[str, int] = {}
+    for p in (positions or []):
+        sym = p.get("symbol")
+        if not sym:
+            continue
+        try:
+            owned = abs(int(float(p.get("shares") or 0)))
+        except (TypeError, ValueError):
+            continue
+        if owned < 1:
+            continue
+        gap = owned - stop_qty.get(sym, 0)
+        if gap > 0:
+            out[sym] = gap
+    return out
+
+
 def check_positions_have_data(positions: List[dict], bars: Dict[str, pd.DataFrame]
                               ) -> List[Finding]:
     """Every held position needs live bars or it cannot be managed.

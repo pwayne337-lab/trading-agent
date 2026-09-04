@@ -39,6 +39,8 @@ def blank_state() -> dict:
         "vetoes": [],
         "orders": [],
         "exits": [],
+        # Stops the agent placed behind positions it found unprotected.
+        "protected": [],
         "skipped": [],
         "findings": [],
         "briefing": "",
