@@ -35,6 +35,7 @@ from tbot.dashboard import write_dashboard
 from tbot.research import Researcher, screen
 from tbot.risk import correlation_block, size_position
 from tbot import ranking
+from tbot import watch
 from tbot.strategy import exit_decision, latest_signal, prepare, trend_state
 
 
@@ -222,6 +223,27 @@ def cmd_run(args):
 
     bars = datamod.load_universe(cfg.watchlist, start=args.start, refresh=True)
 
+    # --- the watchers, before any decision is made on this data -------------
+    previous = state.load_state()
+    findings = watch.run_all(bars, cfg.watchlist, acct, positions, orders_open,
+                             previous, state.load_equity_history())
+    st["findings"] = [f.to_dict() for f in findings]
+    criticals = [f for f in findings if f.severity == watch.CRITICAL]
+
+    if findings:
+        print(f"Checks: {watch.summarize(findings)}")
+        for f in findings:
+            if f.severity != watch.INFO:
+                print(f"  [{f.severity.upper()}] {f.agent}: {f.message}")
+        print()
+
+    # A critical finding means the agent's picture of the world is wrong.
+    # Placing new orders on a wrong picture is how a small fault becomes an
+    # expensive one, so it manages what it already holds and stops there.
+    if criticals:
+        st["errors"] += [f.message for f in criticals]
+        print("Critical checks failed. No new positions will be opened this run.\n")
+
     # --- manage what is already open, before looking for anything new -------
     # The stop and target are live at the broker and need no help. These two
     # exits depend on the daily close, so nothing but this run can act on them.
@@ -273,6 +295,8 @@ def cmd_run(args):
         candidates.append((sym, sig, ranking.score(
             cfg.strategy.rank_by, prepared, len(prepared) - 1, sig.stop)))
 
+    if criticals:
+        candidates = []
     ranked = ranking.order([(c[0], c[2]) for c in candidates], cfg.strategy.rank_by)
     by_symbol = {c[0]: c[1] for c in candidates}
     if cfg.strategy.rank_by != "none" and len(ranked) > 1:

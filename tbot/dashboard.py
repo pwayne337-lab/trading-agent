@@ -34,6 +34,10 @@ def _age(updated_at) -> tuple:
         return "unknown", 1e9, "critical"
 
     hrs = (datetime.now(timezone.utc) - t).total_seconds() / 3600
+    # A run stamped slightly ahead of this clock is clock skew, not a run from
+    # the future. Never render it as negative minutes.
+    if hrs < 0:
+        hrs = 0.0
     if hrs < 1:
         s = f"{int(hrs * 60)} min ago"
     elif hrs < 48:
@@ -97,7 +101,19 @@ def build_html(state: dict = None, history: list = None,
     else:
         banner = ""
 
-    if errors:
+    # The watchers come first. A missing stop order matters more than the
+    # equity number sitting under it.
+    findings = state.get("findings") or []
+    for f in findings:
+        sev = f.get("severity")
+        if sev not in ("critical", "warning"):
+            continue
+        cls = "critical" if sev == "critical" else "warning"
+        label = "Needs attention." if sev == "critical" else "Worth a look."
+        banner += (f'<div class="banner {cls}"><strong>{label}</strong> '
+                   f'{_esc(f.get("message"))}</div>')
+
+    if errors and not findings:
         banner += ('<div class="banner critical"><strong>Errors on the last run.</strong> '
                    + "; ".join(_esc(e) for e in errors[:3]) + '</div>')
 

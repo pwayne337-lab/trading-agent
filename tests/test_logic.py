@@ -369,6 +369,17 @@ s_old = dict(s, updated_at="2026-01-01T00:00:00+00:00")
 check("a stale dashboard warns instead of quietly showing old numbers",
       "Stale" in dashboard.build_html(state=s_old, history=hist))
 
+from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+_future = (_dt.now(_tz.utc) + _td(hours=3)).isoformat()
+check("a timestamp ahead of the clock does not render as negative time",
+      "-" not in dashboard._age(_future)[0], dashboard._age(_future)[0])
+
+check("a critical watcher finding is shown above the numbers",
+      "Needs attention" in dashboard.build_html(
+          state=dict(s, findings=[{"severity": "critical", "agent": "reconcile",
+                                   "message": "UNPROTECTED: no stop behind AAA"}]),
+          history=hist))
+
 # ---------------------------------------------------------------------------
 print("\n6b. The daily-close exits the broker cannot handle")
 # ---------------------------------------------------------------------------

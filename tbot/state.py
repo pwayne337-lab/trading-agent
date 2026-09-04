@@ -40,6 +40,7 @@ def blank_state() -> dict:
         "orders": [],
         "exits": [],
         "skipped": [],
+        "findings": [],
         "briefing": "",
         "recent_trades": [],
         "errors": [],
