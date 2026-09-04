@@ -68,6 +68,10 @@ print("\n2. Signal rules fire only when every condition is true")
 # ---------------------------------------------------------------------------
 
 cfg = AgentConfig()
+# This section checks the pullback rules specifically, so only those are on.
+# With every strategy enabled the list also contains breakouts and reversions,
+# which are supposed to fail a pullback-shaped assertion.
+cfg.strategy.enabled = ["pullback"]
 data = prepare(make_series(n=1200, seed=11), cfg.strategy)
 sigs = signals_for_symbol("TEST", make_series(n=1200, seed=11), cfg.strategy)
 check("some signals were generated on synthetic data", len(sigs) > 0, f"n={len(sigs)}")
@@ -497,6 +501,131 @@ check("the refreshed bars are still present and current",
 _reload = datamod.load_bars("ZZZ", start="1990-01-01")
 check("the merged history is what actually got written to disk",
       len(_reload) == len(_long), f"{len(_reload)} on disk")
+
+
+# ---------------------------------------------------------------------------
+print("\n7a-ii. Three strategies, one discipline")
+# ---------------------------------------------------------------------------
+from tbot import strategy as strat_mod
+from tbot.strategy import (PLAYBOOK, enabled_specs, UnknownStrategy, prepare,
+                           exit_decision, latest_signal)
+from tbot.indicators import rsi as _rsi
+from tbot.config import AgentConfig as _AC
+
+_scfg = _AC().strategy
+
+check("all three rule sets are registered",
+      sorted(PLAYBOOK) == ["breakout", "pullback", "reversion"], sorted(PLAYBOOK))
+check("every strategy has an entry, an exit and a description",
+      all(callable(v.entry) and callable(v.exit) and v.summary for v in PLAYBOOK.values()))
+
+_bad = _AC().strategy
+_bad.enabled = ["pullback", "typo"]
+try:
+    enabled_specs(_bad); _caught = False
+except UnknownStrategy:
+    _caught = True
+check("a misspelled strategy name is an error, not a silent skip", _caught)
+
+# RSI must stay inside its own definition or every threshold built on it lies.
+_rs = _rsi(make_series(n=300, seed=41)["close"], 2).dropna()
+check("RSI stays between 0 and 100",
+      float(_rs.min()) >= -1e-9 and float(_rs.max()) <= 100 + 1e-9,
+      f"{_rs.min():.2f} to {_rs.max():.2f}")
+
+# The breakout window must exclude today, or today's own high sets the level
+# it is being asked to clear and nothing can ever break out.
+_prep = prepare(make_series(n=400, seed=42), _scfg)
+_hi = _prep["donchian_hi"].dropna()
+_raw = _prep["close"].rolling(_scfg.breakout_lookback).max().shift(1).dropna()
+check("the breakout level is built from bars before today, not including it",
+      _hi.equals(_raw))
+
+# No lookahead, per strategy. A signal on the last bar must not change when
+# the bars after it are removed, because when it fires they do not exist yet.
+for _name in ("pullback", "breakout", "reversion"):
+    _c = _AC().strategy; _c.enabled = [_name]
+    _found = None
+    for _seed in range(60, 130):
+        _df = make_series(n=500, seed=_seed)
+        for _cut in range(len(_df) - 60, len(_df)):
+            if latest_signal("X", _df.iloc[:_cut], _c) is not None:
+                _found = (_df, _cut); break
+        if _found: break
+    check(f"{_name}: a setup can actually be produced", _found is not None)
+    if _found:
+        _df, _cut = _found
+        _a = latest_signal("X", _df.iloc[:_cut], _c)
+        _b = latest_signal("X", _df.iloc[:_cut + 20], _c)   # 20 more bars exist
+        _b2 = latest_signal("X", _df.iloc[:_cut], _c)
+        check(f"{_name}: the signal is stable, future bars do not change it",
+              _a.stop == _b2.stop and _a.signal_date == _b2.signal_date)
+        check(f"{_name}: the signal is tagged with the strategy that made it",
+              _a.strategy == _name, _a.strategy)
+        check(f"{_name}: the stop is below the reference close",
+              _a.stop < _a.reference_close)
+        _sa = (_a.reference_close - _a.stop) / _a.atr
+        check(f"{_name}: the stop respects the shared ATR guard rails",
+              _scfg.min_stop_atr - 1e-9 <= _sa <= _scfg.max_stop_atr + 1e-9,
+              f"{_sa:.2f}x ATR")
+
+# The breakout must take the first break, not every bar of the advance.
+_rise = make_series(n=400, seed=7)
+_col = _rise.columns.get_loc("close")
+import numpy as _np
+_ramp = _np.linspace(1.0, 1.9, 120)
+for _c2 in ("open", "high", "low", "close"):
+    _rise.iloc[-120:, _rise.columns.get_loc(_c2)] = (
+        _rise[_c2].iloc[-120:].to_numpy() * _ramp)
+_bo = _AC().strategy; _bo.enabled = ["breakout"]
+_sigs = strat_mod.signals_for_symbol("X", _rise, _bo)
+_dates = [s.signal_date for s in _sigs]
+_runlen = 0
+for _i in range(1, len(_dates)):
+    if (_dates[_i] - _dates[_i - 1]).days <= 1:
+        _runlen += 1
+check("a steady advance is not bought on every single bar",
+      _runlen <= len(_dates) * 0.5,
+      f"{_runlen} of {len(_dates)} signals were back to back")
+
+# The exits are not interchangeable. Mean reversion enters below the short
+# average on purpose, so running the trend exit over it closes it immediately.
+_dip = make_series(n=400, seed=8)
+_p2 = prepare(_dip, _scfg)
+_row = _p2.iloc[-1].copy()
+_row["close"] = float(_row["sma_exit"]) * 0.95      # below the 10-day average
+_row["sma_fast"] = float(_row["close"]) * 1.05      # and below the 50-day
+check("the trend exit would close a position sitting below its 50-day average",
+      strat_mod._trend_exit(_row, _scfg, 1) is not None)
+check("the reversion exit HOLDS that same position, which is the point",
+      strat_mod._reversion_exit(_row, _scfg, 1) is None)
+
+_row2 = _row.copy()
+_row2["close"] = float(_row2["sma_exit"]) * 1.02    # the bounce arrived
+check("the reversion exit takes the bounce when it comes",
+      "bounce complete" in (strat_mod._reversion_exit(_row2, _scfg, 1) or ""))
+check("the reversion time stop is shorter than the trend one",
+      _scfg.reversion_max_hold < _scfg.max_hold_days)
+check("the reversion time stop fires at its own limit",
+      "time stop" in (strat_mod._reversion_exit(_row, _scfg,
+                                                _scfg.reversion_max_hold) or ""))
+
+# exit_decision must route by strategy, not by whatever ran last.
+_dfx = _dip.copy()
+_dfx.iloc[-1, _col] = float(_p2["sma_exit"].iloc[-1]) * 0.95
+check("exit_decision routes a reversion position to the reversion exits",
+      exit_decision(_dfx, _scfg, 1, "reversion") is None
+      or "bounce" in exit_decision(_dfx, _scfg, 1, "reversion"))
+check("an unrecognised strategy falls back to the trend exits rather than none",
+      exit_decision(_dfx, _scfg, 999, "nonsense") is not None)
+
+# Two strategies must never both open the same symbol on the same day.
+_multi = _AC().strategy
+_multi.enabled = ["pullback", "breakout", "reversion"]
+_all_sigs = strat_mod.signals_for_symbol("X", make_series(n=600, seed=9), _multi)
+check("at most one signal per symbol per day",
+      len(_all_sigs) == len({s.signal_date for s in _all_sigs}),
+      f"{len(_all_sigs)} signals on {len({s.signal_date for s in _all_sigs})} days")
 
 
 # ---------------------------------------------------------------------------

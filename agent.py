@@ -265,6 +265,11 @@ def cmd_run(args):
     # --- manage what is already open, before looking for anything new -------
     # The stop and target are live at the broker and need no help. These two
     # exits depend on the daily close, so nothing but this run can act on them.
+    # Which strategy opened each position, carried forward from the last run.
+    # Anything unknown is managed by the pullback exits, which is the oldest
+    # and most conservative set, and is noted rather than assumed silently.
+    strat_map = dict((previous or {}).get("strategy_by_symbol") or {})
+
     entry_dates = broker.entry_dates() if positions else {}
     for p in positions:
         sym = p["symbol"]
@@ -280,7 +285,12 @@ def cmd_run(args):
             except Exception:
                 bars_held = None
 
-        reason = exit_decision(df, cfg.strategy, bars_held)
+        opened_by = strat_map.get(sym, "pullback")
+        if sym not in strat_map:
+            st["errors"].append(
+                f"no record of which strategy opened {sym}, managing it with "
+                f"the pullback exits")
+        reason = exit_decision(df, cfg.strategy, bars_held, opened_by)
         if not reason:
             continue
 
@@ -299,6 +309,7 @@ def cmd_run(args):
                             "unrealized_pl": p.get("unrealized_pl")})
         if fill.submitted:
             held.discard(sym)
+            strat_map.pop(sym, None)
             gross -= p.get("market_value", 0)
             open_count = max(0, open_count - 1)
 
@@ -357,7 +368,8 @@ def cmd_run(args):
             continue
 
         st["signals"].append({"symbol": sym, "entry": order.entry, "stop": order.stop,
-                              "target": order.target, "shares": order.shares})
+                              "target": order.target, "shares": order.shares,
+                              "strategy": sig.strategy, "why": sig.notes})
 
         try:
             fill = broker.submit_bracket(
@@ -373,14 +385,16 @@ def cmd_run(args):
             st["errors"].append(f"order rejected for {sym}: {exc}")
             st["skipped"].append({"symbol": sym, "reason": f"broker rejected: {exc}"})
             continue
-        print(f"  {sym}: {fill.status} {fill.detail or ''} "
+        print(f"  {sym}: [{sig.strategy}] {fill.status} {fill.detail or ''} "
               f"({order.shares} sh, risking ${order.dollars_at_risk:,.2f})")
         committed.add(sym)
         if fill.submitted:
             st["orders"].append({"symbol": sym, "shares": order.shares,
                                  "stop": order.stop, "target": order.target,
                                  "dollars_at_risk": order.dollars_at_risk,
-                                 "order_id": fill.order_id})
+                                 "order_id": fill.order_id,
+                                 "strategy": sig.strategy})
+            strat_map[sym] = sig.strategy
             open_count += 1
             gross += order.notional
 
@@ -400,6 +414,11 @@ def cmd_run(args):
     if cfg.research.write_briefing:
         st["briefing"] = researcher.daily_briefing(
             positions, st["signals"], st["vetoes"], equity, day_change)
+
+    # Prune to what is still committed so the map cannot grow forever with
+    # symbols that were closed months ago.
+    st["strategy_by_symbol"] = {k: v for k, v in strat_map.items()
+                               if k in held or k in committed}
 
     st["research"]["llm_calls"] = researcher.calls
     st["research"]["llm_errors"] = researcher.errors

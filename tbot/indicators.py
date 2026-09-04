@@ -60,6 +60,30 @@ def avg_dollar_volume(close: pd.Series, volume: pd.Series, period: int) -> pd.Se
     return (close * volume).rolling(window=period, min_periods=period).mean()
 
 
+def rolling_max(series: pd.Series, period: int) -> pd.Series:
+    return series.rolling(period, min_periods=period).max()
+
+
+def rsi(series: pd.Series, period: int = 2) -> pd.Series:
+    """Relative strength index, Wilder smoothing.
+
+    At a short period this is not a trend gauge, it is an "how stretched is
+    this in the last couple of days" gauge, which is what the mean reversion
+    rules want. A reading under 10 on a 2-period RSI means two straight days
+    of almost nothing but selling.
+    """
+    delta = series.diff()
+    gain = delta.clip(lower=0.0)
+    loss = (-delta).clip(lower=0.0)
+    avg_gain = gain.ewm(alpha=1.0 / period, adjust=False, min_periods=period).mean()
+    avg_loss = loss.ewm(alpha=1.0 / period, adjust=False, min_periods=period).mean()
+    rs = avg_gain / avg_loss.replace(0.0, np.nan)
+    out = 100.0 - (100.0 / (1.0 + rs))
+    # No losses at all in the window is a maximum reading, not a missing one.
+    out = out.where(~((avg_loss == 0) & (avg_gain > 0)), 100.0)
+    return out
+
+
 def add_indicators(df: pd.DataFrame, cfg) -> pd.DataFrame:
     """Attach every indicator the strategy needs to an OHLCV frame.
 
@@ -72,4 +96,13 @@ def add_indicators(df: pd.DataFrame, cfg) -> pd.DataFrame:
     out["atr"] = atr(out["high"], out["low"], out["close"], cfg.atr_period)
     out["swing_low"] = rolling_min(out["low"], cfg.swing_lookback)
     out["adv"] = avg_dollar_volume(out["close"], out["volume"], cfg.dollar_volume_window)
+
+    # Used by the breakout rules. Shifted by one bar on purpose: the question
+    # is whether today cleared the range that existed BEFORE today, and a
+    # window that includes today's own high can never be cleared by it.
+    out["donchian_hi"] = rolling_max(out["close"], cfg.breakout_lookback).shift(1)
+
+    # Used by the mean reversion rules.
+    out["rsi_fast"] = rsi(out["close"], cfg.reversion_rsi_period)
+    out["sma_exit"] = sma(out["close"], cfg.reversion_sma)
     return out

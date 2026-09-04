@@ -182,7 +182,8 @@ def analyze(trades: pd.DataFrame) -> dict:
     overall = _stats(df["R"])
 
     buckets = {}
-    for col, label in (("reason", "How the trade ended"),
+    for col, label in (("strategy", "By strategy"),
+                       ("reason", "How the trade ended"),
                        ("regime", "Market regime at entry"),
                        ("stop_width", "How wide the stop was"),
                        ("symbol", "By symbol"),
@@ -274,6 +275,18 @@ def format_report(result: dict, max_rows: int = 12) -> str:
         "  Nothing here changes what the agent does. It is a record for you to",
         "  read. A bucket that looks good on 15 trades is noise, which is why",
         "  those rows refuse to show a number at all.",
-        "",
     ]
+
+    strat = result.get("buckets", {}).get("By strategy")
+    if strat is not None and len(strat) > 1:
+        lines += [
+            "",
+            f"  You are running {len(strat)} strategies. Comparing them has a trap in",
+            "  it: the more rule sets you measure, the more likely one looks best",
+            "  by luck alone. At the usual 95% threshold, testing three gives you",
+            "  about a 1 in 7 chance that at least one clears the bar having done",
+            "  nothing. Before retiring the loser, check whether the winner is",
+            "  still ahead in a period you did not look at when you chose it.",
+        ]
+    lines.append("")
     return "\n".join(lines)

@@ -182,9 +182,15 @@ def build_html(state: dict = None, history: list = None,
             f'<strong>{_esc(e.get("symbol"))}</strong> {_esc(e.get("reason"))}'
             f'{pl_txt}</li>')
     for o in orders:
+        # Which rule set opened it. Without this the page shows a list of buys
+        # with no way to tell a breakout from a dip buy, and no way to notice
+        # that one strategy has been carrying everything.
+        via = o.get("strategy")
+        via_txt = f' <span class="tag">{_esc(via)}</span>' if via else ""
         items.append(
             f'<li class="ev ok"><span class="tag">bought</span> '
-            f'<strong>{_esc(o.get("symbol"))}</strong> {o.get("shares", 0)} sh, '
+            f'<strong>{_esc(o.get("symbol"))}</strong>{via_txt} '
+            f'{o.get("shares", 0)} sh, '
             f'stop ${float(o.get("stop") or 0):,.2f}, '
             f'target ${float(o.get("target") or 0):,.2f}, '
             f'risking ${float(o.get("dollars_at_risk") or 0):,.2f}</li>')

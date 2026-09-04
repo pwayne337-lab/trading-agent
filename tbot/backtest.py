@@ -28,7 +28,7 @@ from . import ranking
 from .config import AgentConfig
 from .risk import (DrawdownMonitor, apply_slippage, commission,
                    correlation_block, size_position)
-from .strategy import prepare, _row_signal
+from .strategy import prepare, _row_signal, PLAYBOOK
 
 
 @dataclass
@@ -44,6 +44,7 @@ class Trade:
     exit: Optional[float] = None
     exit_reason: str = ""
     fees: float = 0.0
+    strategy: str = "pullback"
 
     # Conditions at entry, kept so the journal can ask what kind of setup
     # this was rather than only how it ended.
@@ -100,6 +101,7 @@ class PendingEntry:
     pct_from_ema: float = float("nan")
     regime: Optional[bool] = None
     rank_score: float = 0.0
+    strategy: str = "pullback"
 
 
 class Backtest:
@@ -222,12 +224,16 @@ class Backtest:
             c = float(row["close"])
             sma_fast = row["sma_fast"]
 
-            if self.cfg.strategy.exit_on_trend_break and not pd.isna(sma_fast) and c < float(sma_fast):
+            # Each strategy gets its own soft exits. They are not
+            # interchangeable: the trend exit fires on a close below the 50-day
+            # average, which is where a mean reversion trade is entered on
+            # purpose, so applying it there would close every one of those
+            # trades on day one.
+            spec = PLAYBOOK.get(t.strategy) or PLAYBOOK["pullback"]
+            reason = spec.exit(row, self.cfg.strategy, pos.bars_held)
+            if reason:
                 pos.pending_exit = True
-                pos.pending_exit_reason = "trend break"
-            elif pos.bars_held >= self.cfg.strategy.max_hold_days:
-                pos.pending_exit = True
-                pos.pending_exit_reason = "time stop"
+                pos.pending_exit_reason = reason.split(":")[0]
 
     # -- entries ------------------------------------------------------------
 
@@ -305,6 +311,7 @@ class Backtest:
                     pct_from_ema=round(pend.pct_from_ema, 3)
                     if pend.pct_from_ema == pend.pct_from_ema else float("nan"),
                     regime=pend.regime,
+                    strategy=pend.strategy,
                 )
             )
 
@@ -341,7 +348,8 @@ class Backtest:
                     sym, date, sig.stop, atr=sig.atr, pct_from_ema=pct_ema,
                     regime=self._regime(date),
                     rank_score=ranking.score(self.cfg.strategy.rank_by,
-                                             self.data[sym], i, sig.stop))
+                                             self.data[sym], i, sig.stop),
+                    strategy=sig.strategy)
 
     # -- main loop ----------------------------------------------------------
 
@@ -389,6 +397,7 @@ class BacktestResult:
         for t in self.trades:
             rows.append({
                 "symbol": t.symbol,
+                "strategy": t.strategy,
                 "signal_date": t.signal_date.date(),
                 "entry_date": t.entry_date.date(),
                 "exit_date": t.exit_date.date() if t.exit_date else None,

@@ -44,6 +44,11 @@ def blank_state() -> dict:
         "briefing": "",
         "recent_trades": [],
         "errors": [],
+        # Which rule set opened each open position. The broker does not record
+        # this and cannot, but the exits differ per strategy, so without it a
+        # mean reversion trade would be managed by the trend exit and closed
+        # the day after it opened.
+        "strategy_by_symbol": {},
         "research": {"llm_calls": 0, "llm_errors": 0, "enabled": False},
     }
 

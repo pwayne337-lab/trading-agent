@@ -17,18 +17,88 @@ from typing import List
 # spreads, which matters more than most beginners expect: a wide spread eats
 # your edge on every single trade, entry and exit.
 DEFAULT_WATCHLIST: List[str] = [
-    # Index / sector ETFs
-    "SPY", "QQQ", "IWM", "DIA", "XLK", "XLF", "XLE", "XLV", "SMH",
-    # Mega caps
-    "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "AVGO",
-    "AMD", "NFLX", "COST", "JPM", "V", "UNH", "XOM", "LLY", "WMT",
-    "CRM", "ORCL", "ADBE",
+    # Roughly 150 liquid US large caps, spread across sectors on purpose.
+    #
+    # Why this many: the entry rules only fire about 3 to 4 times a year on any
+    # one stock, and the position cap almost never binds. Trade count therefore
+    # tracks the length of this list, near enough to a straight line. Thirty
+    # symbols produced about 105 trades a year. This produces roughly three
+    # times that, which is what shortens the wait for a result that can be told
+    # apart from luck.
+    #
+    # Why spread across sectors: the old list was mostly big tech, and the
+    # correlation check exists precisely to refuse the same bet twice. A list
+    # that is really one bet wastes slots on near-duplicates.
+    #
+    # An honest caveat that belongs next to the list itself. These are
+    # companies that are large and liquid in 2026. Any backtest run over this
+    # list is flattered by that, because the ones that failed on the way here
+    # are not in it. Forward from today the list is clean, since nothing in it
+    # was chosen with knowledge of what happens next. Backward, it is not
+    # evidence. Do not read a backtest on this list as a forecast.
+
+    # Index and sector ETFs
+    "SPY", "QQQ", "IWM", "DIA", "MDY", "RSP",
+    "XLK", "XLF", "XLE", "XLV", "XLI", "XLY", "XLP", "XLU", "XLB", "XLRE",
+    "SMH", "IBB", "ITB", "XRT", "KRE", "GLD", "SLV", "TLT", "HYG", "EFA", "EEM",
+
+    # Technology and semiconductors
+    "AAPL", "MSFT", "NVDA", "AVGO", "AMD", "QCOM", "TXN", "INTC", "MU", "AMAT",
+    "LRCX", "KLAC", "ADI", "NXPI", "MRVL", "ON", "SNPS", "CDNS", "ANET", "SMCI",
+
+    # Software and internet
+    "GOOGL", "META", "AMZN", "NFLX", "CRM", "ORCL", "ADBE", "NOW", "INTU",
+    "PANW", "SNOW", "DDOG", "WDAY", "TEAM", "SHOP", "UBER", "ABNB", "SPOT",
+
+    # Financials
+    "JPM", "BAC", "WFC", "GS", "MS", "C", "SCHW", "BLK", "SPGI", "AXP",
+    "V", "MA", "PYPL", "COF", "USB", "PNC", "CB", "PGR", "AIG", "MET",
+
+    # Healthcare
+    "UNH", "LLY", "JNJ", "ABBV", "MRK", "PFE", "TMO", "ABT", "DHR", "AMGN",
+    "GILD", "BMY", "VRTX", "REGN", "ISRG", "SYK", "BSX", "MDT", "CI", "HCA",
+
+    # Consumer
+    "WMT", "COST", "HD", "LOW", "TGT", "NKE", "SBUX", "MCD", "CMG", "TJX",
+    "PG", "KO", "PEP", "PM", "MDLZ", "CL", "KMB", "GIS", "DG", "ROST",
+
+    # Industrials and transport
+    "CAT", "DE", "HON", "GE", "BA", "LMT", "RTX", "NOC", "UNP", "CSX",
+    "UPS", "FDX", "ETN", "EMR", "PH", "ITW", "MMM", "WM", "CARR", "JCI",
+
+    # Energy, materials, utilities, real estate
+    "XOM", "CVX", "COP", "SLB", "EOG", "PSX", "MPC", "OXY", "WMB", "KMI",
+    "LIN", "APD", "SHW", "FCX", "NEM", "NUE", "DOW",
+    "NEE", "DUK", "SO", "D", "AEP", "EXC",
+    "AMT", "PLD", "EQIX", "SPG", "O", "CCI",
+
+    # Communications, autos and other large caps
+    "TSLA", "GM", "F", "DIS", "CMCSA", "T", "VZ", "TMUS", "CHTR", "EA",
+    "BRK-B", "MMC", "AON", "ADP", "PAYX", "FI", "CTAS", "ORLY", "AZO", "YUM",
 ]
 
 
 @dataclass
 class StrategyConfig:
-    """The trend pullback rules, expressed as numbers."""
+    """The trading rules, expressed as numbers.
+
+    Three rule sets live here and any combination of them can be switched on.
+    They look for genuinely different things, which is the point: a pullback
+    buys weakness inside strength, a breakout buys strength itself, and mean
+    reversion buys a stock everybody just sold. They rarely fire on the same
+    day on the same stock, so running all three raises the trade count without
+    taking the same trade twice.
+
+    What does NOT change between them is the discipline. Every one of them
+    sizes off the same 1% risk, places a stop before the order goes in, takes
+    the same liquidity floor, and is judged by the same journal that refuses to
+    call a small sample an edge.
+    """
+
+    # Which rule sets are live. Order matters only for tie-breaking: a symbol
+    # produces at most one trade per day, from the first strategy that fires.
+    enabled: List[str] = field(
+        default_factory=lambda: ["pullback", "breakout", "reversion"])
 
     # --- Trend filter -------------------------------------------------------
     # Price must be above the long moving average and the medium average must
@@ -76,6 +146,33 @@ class StrategyConfig:
     #   reward_risk  tightest stop relative to the stock's own noise
     #   liquidity    heaviest dollar volume
     rank_by: str = "none"
+
+    # --- Breakout rules -----------------------------------------------------
+    # Same trend filter as the pullback, then: today's close is the highest
+    # close of the last N sessions and yesterday's was not. That second half
+    # matters. Without it every bar of a long run is a fresh "breakout" and
+    # you buy the same move ten times.
+    #
+    # There is no swing low to hide behind at a new high, so the stop is a
+    # straight multiple of the stock's own daily range.
+    breakout_lookback: int = 50
+    breakout_stop_atr: float = 2.0
+
+    # --- Mean reversion rules -----------------------------------------------
+    # Only in a long-term uptrend, only when the last two sessions have been
+    # almost pure selling (2-period RSI under 10) and price is under its
+    # 10-day average. This is buying a dip in something that is still healthy,
+    # which is a different bet from the other two and fails in different
+    # weather.
+    #
+    # It gets a wider stop because it enters while price is still falling, and
+    # a much shorter leash because a bounce that has not happened within two
+    # weeks is not going to.
+    reversion_rsi_period: int = 2
+    reversion_rsi_max: float = 10.0
+    reversion_sma: int = 10
+    reversion_stop_atr: float = 2.5
+    reversion_max_hold: int = 10
 
     # --- Liquidity filter ---------------------------------------------------
     # Average dollar volume floor. Thin names have wide spreads and gap hard.

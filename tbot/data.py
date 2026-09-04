@@ -134,8 +134,71 @@ def download_bars(symbol: str, start: str, end: Optional[str] = None,
     raise DataError(f"could not download {symbol}: {last_err}")
 
 
+def download_many(symbols: List[str], start: str, end: Optional[str] = None,
+                  chunk: int = 40) -> Dict[str, pd.DataFrame]:
+    """Fetch several symbols per request instead of one at a time.
+
+    A watchlist of 200 names is 200 separate HTTP requests the naive way, which
+    is slow and, from a shared address like a CI runner, a good way to get rate
+    limited into a half-empty result. Yahoo will return a batch in one call, so
+    this asks in chunks and splits the frame afterwards.
+
+    Anything the batch does not return is retried on its own, because one bad
+    ticker in a chunk should not cost you the other thirty-nine.
+    """
+    try:
+        import yfinance as yf
+    except ImportError as exc:
+        raise DataError(
+            "yfinance is not installed. Run: pip install -r requirements.txt"
+        ) from exc
+
+    out: Dict[str, pd.DataFrame] = {}
+    todo = [s.upper() for s in symbols]
+
+    for i in range(0, len(todo), chunk):
+        group = todo[i:i + chunk]
+        try:
+            raw = yf.download(group, start=start, end=end, progress=False,
+                              auto_adjust=True, threads=False, group_by="column")
+        except Exception:
+            continue
+        if raw is None or len(raw) == 0:
+            continue
+        if not isinstance(raw.columns, pd.MultiIndex):
+            # Yahoo flattens the columns when only one symbol comes back.
+            if len(group) == 1:
+                try:
+                    out[group[0]] = _normalize(raw)
+                except DataError:
+                    pass
+            continue
+        for sym in group:
+            try:
+                one = raw.xs(sym, axis=1, level=1).dropna(how="all")
+            except (KeyError, IndexError):
+                continue
+            if len(one) == 0:
+                continue
+            try:
+                out[sym] = _normalize(one)
+            except DataError:
+                pass
+
+    # Whatever the batch missed, ask for individually before giving up on it.
+    for sym in todo:
+        if sym in out:
+            continue
+        try:
+            out[sym] = download_bars(sym, start=start, end=end, retries=2)
+        except Exception:
+            pass
+    return out
+
+
 def load_bars(symbol: str, start: str = "2015-01-01", end: Optional[str] = None,
-              use_cache: bool = True, refresh: bool = False) -> pd.DataFrame:
+              use_cache: bool = True, refresh: bool = False,
+              fresh: Optional[pd.DataFrame] = None) -> pd.DataFrame:
     """Load daily bars, preferring the local cache.
 
     Set refresh=True to force a re-download (do this before live scanning so
@@ -144,11 +207,15 @@ def load_bars(symbol: str, start: str = "2015-01-01", end: Optional[str] = None,
     symbol = symbol.upper()
     path = _cache_path(symbol)
 
-    if use_cache and path.exists() and not refresh:
+    if use_cache and path.exists() and not refresh and fresh is None:
         df = pd.read_csv(path, index_col=0, parse_dates=True)
         df = _normalize(df)
     else:
-        fresh = download_bars(symbol, start=start, end=end)
+        # `fresh` lets a caller hand over bars it already fetched in a batch.
+        # Everything below, including the re-adjustment check, is identical
+        # either way, so batching cannot quietly skip a safety step.
+        if fresh is None:
+            fresh = download_bars(symbol, start=start, end=end)
 
         # Merge into whatever is already cached instead of replacing it.
         # A daily run only asks for a couple of years of bars, and without
@@ -207,9 +274,19 @@ def load_universe(symbols: List[str], start: str = "2015-01-01",
                   ) -> Dict[str, pd.DataFrame]:
     """Load bars for a whole watchlist. Symbols that fail are skipped loudly."""
     out: Dict[str, pd.DataFrame] = {}
+
+    prefetched: Dict[str, pd.DataFrame] = {}
+    if refresh and len(symbols) > 1:
+        prefetched = download_many(symbols, start=start, end=end)
+        missed = [s for s in symbols if s.upper() not in prefetched]
+        if missed:
+            print(f"  {len(missed)} symbol(s) returned nothing: "
+                  f"{', '.join(missed[:10])}")
+
     for sym in symbols:
         try:
-            out[sym] = load_bars(sym, start=start, end=end, refresh=refresh)
+            out[sym] = load_bars(sym, start=start, end=end, refresh=refresh,
+                                 fresh=prefetched.get(sym.upper()))
         except Exception as exc:
             print(f"  [{sym}] SKIPPED: {exc}")
     if not out:
