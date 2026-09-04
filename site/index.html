@@ -4,6 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
+<!-- Added to a phone home screen this runs as a standalone app, and iOS will
+     happily serve the copy it cached the day you added it. The script at the
+     bottom checks for a newer run and reloads past that cache. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Agent">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <title>Trading agent</title>
 <style>
   :root {
@@ -91,9 +97,9 @@
 
   <nav class="sitenav"><a href="./floor.html">How a run works &rarr;</a></nav>
 
-  
+  <div id="banners"></div>
 
-  <div class="tiles"><div class="tile "><div class="tl">Account equity</div><div class="tv">$100,000.00</div><div class="ts">paper account &middot; 1 run(s) recorded</div></div><div class="tile "><div class="tl">Today</div><div class="tv">+0.00%</div><div class="ts">since the previous run</div></div><div class="tile "><div class="tl">Since start</div><div class="tv">+0.00%</div><div class="ts">of tracking</div></div><div class="tile "><div class="tl">Open positions</div><div class="tv">0</div><div class="ts">open P&amp;L $+0.00</div></div><div class="tile "><div class="tl">Cash</div><div class="tv">$100,000.00</div><div class="ts">uninvested</div></div><div class="tile good"><div class="tl">Last run</div><div class="tv">14 hours ago</div><div class="ts">2 order(s), 0 blocked</div></div></div>
+  <div class="tiles"><div class="tile "><div class="tl">Account equity</div><div class="tv">$100,000.00</div><div class="ts">paper account &middot; 1 run(s) recorded</div></div><div class="tile "><div class="tl">Today</div><div class="tv">+0.00%</div><div class="ts">since the previous run</div></div><div class="tile "><div class="tl">Since start</div><div class="tv">+0.00%</div><div class="ts">of tracking</div></div><div class="tile "><div class="tl">Open positions</div><div class="tv">0</div><div class="ts">open P&amp;L $+0.00</div></div><div class="tile "><div class="tl">Cash</div><div class="tv">$100,000.00</div><div class="ts">uninvested</div></div><div class="tile good" id="age-tile"><div class="tl">Last run</div><div class="tv" id="age-val">14 hours ago</div><div class="ts">2 order(s), 0 blocked</div></div></div>
 
   <h2>Account equity</h2>
   <div class="card empty">Not enough history to plot yet. The chart appears after the agent has run on two separate days.</div>
@@ -118,6 +124,82 @@
   </footer>
 </div>
 <script>
+/* ---------------------------------------------------------------------------
+   Freshness, computed in the browser rather than baked into the page.
+
+   The age of the last run was previously written into the HTML by Python at
+   the moment the page was generated, so it read "0 min ago" forever after.
+   That is the single most misleading thing a monitoring page can do: it made
+   a day-old snapshot look live. Both problems are fixed here.
+
+   1. The age is recomputed from a fixed timestamp every time the page is
+      opened, and every minute it stays open.
+   2. A tiny data.json is fetched with caching disabled. If the agent has run
+      since this copy of the page was built, the browser is sent to a URL it
+      has never seen, which is the only reliable way past an iOS home-screen
+      cache.
+--------------------------------------------------------------------------- */
+(function () {
+  var BUILT = "2026-09-03T23:18:17+00:00";
+
+  function ageParts(iso) {
+    if (!iso) return { text: "never run", hrs: 1e9, sev: "warning" };
+    var t = Date.parse(iso);
+    if (isNaN(t)) return { text: "unknown", hrs: 1e9, sev: "critical" };
+    var hrs = (Date.now() - t) / 3600000;
+    if (hrs < 0) hrs = 0;
+    var text = hrs < 1 ? Math.round(hrs * 60) + " min ago"
+             : hrs < 48 ? Math.round(hrs) + " hours ago"
+             : Math.round(hrs / 24) + " days ago";
+    var sev = hrs < 30 ? "good" : (hrs < 96 ? "warning" : "critical");
+    return { text: text, hrs: hrs, sev: sev };
+  }
+
+  function paint() {
+    var a = ageParts(BUILT);
+    var val = document.getElementById("age-val");
+    var tile = document.getElementById("age-tile");
+    if (val) val.textContent = a.text;
+    if (tile) tile.className = "tile " + a.sev;
+
+    var host = document.getElementById("banners");
+    if (!host) return;
+    var old = document.getElementById("stale-banner");
+    if (old) old.parentNode.removeChild(old);
+    if (a.hrs > 30 && BUILT) {
+      var b = document.createElement("div");
+      b.id = "stale-banner";
+      b.className = "banner " + (a.hrs > 96 ? "critical" : "warning");
+      b.innerHTML = (a.hrs > 96
+        ? "<strong>Stale.</strong> The agent last ran " + a.text +
+          ". Nothing on this page is current. Check that the scheduled run is still working."
+        : "<strong>Getting old.</strong> Last run " + a.text +
+          ". Fine over a weekend or a market holiday, not fine on a Wednesday.");
+      host.insertBefore(b, host.firstChild);
+    }
+  }
+
+  paint();
+  setInterval(paint, 60000);
+
+  function checkForNewer() {
+    fetch("./data.json?t=" + Date.now(), { cache: "no-store" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (d && d.updated_at && d.updated_at !== BUILT) {
+          location.replace("./index.html?v=" + encodeURIComponent(d.updated_at));
+        }
+      })
+      .catch(function () { /* opened from a file, or offline: keep what we have */ });
+  }
+
+  checkForNewer();
+  // Coming back to a home-screen app does not reload it, so check again.
+  document.addEventListener("visibilitychange", function () {
+    if (!document.hidden) { paint(); checkForNewer(); }
+  });
+})();
+
 (function(){
   var pts = [];
   var card = document.getElementById('c1'), tip = document.getElementById('t1');

@@ -1,0 +1,50 @@
+# Publishes site/ to GitHub Pages whenever the site changes on main.
+#
+# Why this exists: daily.yml is the only thing that used to upload the Pages
+# artifact, and it runs on a schedule. So a page committed by hand sat in the
+# repo but was never deployed, and its URL 404'd until the next weekday run.
+# This workflow publishes the committed site/ directly. It never runs the
+# agent and never touches the broker.
+name: Publish the site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Pages allows one deployment at a time. Queue behind the daily run rather
+# than cancelling it, so a scheduled publish is never lost.
+concurrency:
+  group: pages-deploy
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fail if a page is missing its document skeleton
+        run: |
+          for f in site/*.html; do
+            head -c 400 "$f" | grep -qi '<!doctype html>' \
+              || { echo "$f has no doctype; browsers render it in quirks mode"; exit 1; }
+          done
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - id: deploy
+        uses: actions/deploy-pages@v4

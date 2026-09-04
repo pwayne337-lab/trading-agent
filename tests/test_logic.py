@@ -374,6 +374,25 @@ _future = (_dt.now(_tz.utc) + _td(hours=3)).isoformat()
 check("a timestamp ahead of the clock does not render as negative time",
       "-" not in dashboard._age(_future)[0], dashboard._age(_future)[0])
 
+# The bug this guards against: the age of the last run used to be written
+# into the HTML by Python at build time, so a page added to a phone home
+# screen read "0 min ago" forever and a day-old snapshot looked live.
+_fresh_html = dashboard.build_html(state=s, history=hist)
+check("the page carries the run timestamp for the browser to work from",
+      'var BUILT = "' in _fresh_html)
+check("the age is recomputed in the browser, not frozen at build time",
+      "function ageParts" in _fresh_html and "setInterval" in _fresh_html)
+check("the age tile is addressable so it can be updated",
+      'id="age-val"' in _fresh_html and 'id="age-tile"' in _fresh_html)
+check("the stale banner can be inserted client-side too",
+      'id="banners"' in _fresh_html and 'id = "stale-banner"' in _fresh_html)
+check("it checks for a newer run with caching disabled",
+      'cache: "no-store"' in _fresh_html and "data.json" in _fresh_html)
+check("a newer run navigates past the cached copy",
+      "location.replace" in _fresh_html)
+check("reopening a home-screen app rechecks rather than trusting the cache",
+      "visibilitychange" in _fresh_html)
+
 check("a critical watcher finding is shown above the numbers",
       "Needs attention" in dashboard.build_html(
           state=dict(s, findings=[{"severity": "critical", "agent": "reconcile",

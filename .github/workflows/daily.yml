@@ -64,6 +64,11 @@ jobs:
   publish:
     needs: run
     runs-on: ubuntu-latest
+    # Same group as the publish-the-site workflow: Pages takes one deployment
+    # at a time, so the two queue instead of racing.
+    concurrency:
+      group: pages-deploy
+      cancel-in-progress: false
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}

@@ -1,3 +1,9 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
 <title>The Sorting Line</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;450;600&family=Martian+Mono:wght@500;700&display=swap">
 <style>
@@ -144,6 +150,11 @@
   }
   .chip.alive { color:var(--flow); border-color:var(--flow); background:var(--flow-dim); }
   .chip.cut { color:var(--cut); border-color:rgba(200,87,79,.5); }
+  /* A phone has to hold the same 26 chips. Shrink them; the column count
+     below is worked out from the measured width, so the two stay in step. */
+  @media (max-width:560px) {
+    .chip { font-size:10px; padding:2px 5px; border-radius:4px; }
+  }
 
   .ticket {
     position:absolute; top:0; left:0; width:186px;
@@ -241,6 +252,9 @@
     .log div { animation:none; opacity:1; }
   }
 </style>
+</head>
+
+<body>
 
 <div class="wrap">
 
@@ -369,7 +383,10 @@
   ];
 
   var chips = {}, ticket = null, W = 0, H = 0;
-  var PER_ROW = 7;   // wider columns: thirteen across overlaps at this width
+  // Worked out in measure() from the real stage and chip widths. Fixed values
+  // here only held on a desktop; on a phone the columns were narrower than the
+  // chips and the field overlapped into an unreadable pile.
+  var PER_ROW = 7, COL_W = 62, ROW_GAP = 25;
 
   function build() {
     // lanes
@@ -406,6 +423,23 @@
 
   function measure() {
     W = stage.clientWidth; H = stage.clientHeight;
+
+    var cw = 46;
+    TICKERS.forEach(function (sym) {
+      var c = chips[sym];
+      if (c && c.offsetWidth > cw) cw = c.offsetWidth;
+    });
+
+    // The rejects chute owns the right 74px of the stage. Keep the field clear
+    // of it, then take as many columns as fit without chips touching.
+    var usable = Math.max(cw + 5, W - 82 - 8);
+    PER_ROW = Math.max(3, Math.min(7, Math.floor(usable / (cw + 5))));
+    COL_W = usable / PER_ROW;
+
+    // However many rows that leaves must still sit above the scanner lane.
+    var rows = Math.max(1, Math.ceil(TICKERS.length / PER_ROW));
+    var band = H * (LANES[1].y - LANES[0].y) - 24;
+    ROW_GAP = Math.max(15, Math.min(25, band / rows));
   }
 
   function put(sym, x, y, dur) {
@@ -418,25 +452,25 @@
 
   // Spread the full field across two rows at the top.
   function spread(lane) {
-    var gapX = (W - 96) / PER_ROW, y0 = H * LANES[lane].y + 12;
+    var y0 = H * LANES[lane].y + 12;
     TICKERS.forEach(function (sym, i) {
       var row = Math.floor(i / PER_ROW), col = i % PER_ROW;
-      put(sym, 8 + col * gapX, y0 + row * 25, 0);
+      put(sym, 8 + col * COL_W, y0 + row * ROW_GAP, 0);
       chips[sym].style.opacity = "1";
     });
   }
 
   function moveField(lane) {
-    var gapX = (W - 96) / PER_ROW, y0 = H * LANES[lane].y + 12;
+    var y0 = H * LANES[lane].y + 12;
     TICKERS.forEach(function (sym, i) {
       var row = Math.floor(i / PER_ROW), col = i % PER_ROW;
-      put(sym, 8 + col * gapX, y0 + row * 25);
+      put(sym, 8 + col * COL_W, y0 + row * ROW_GAP);
     });
   }
 
   function centerRow(list, lane) {
     var y = H * LANES[lane].y + 12;
-    var span = 62, total = list.length * span;
+    var span = Math.min(62, Math.max(46, COL_W)), total = list.length * span;
     var x0 = ((W - 80) - total) / 2 + 8;
     list.forEach(function (sym, i) {
       put(sym, x0 + i * span, y);
@@ -584,3 +618,5 @@
   else { requestAnimationFrame(frame); }
 })();
 </script>
+</body>
+</html>

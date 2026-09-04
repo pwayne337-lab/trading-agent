@@ -12,6 +12,7 @@ than no dashboard at all.
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -49,9 +50,14 @@ def _age(updated_at) -> tuple:
     return s, hrs, sev
 
 
-def _tile(label, value, sub="", tone=""):
-    return (f'<div class="tile {tone}"><div class="tl">{label}</div>'
-            f'<div class="tv">{value}</div><div class="ts">{sub}</div></div>')
+def _tile(label, value, sub="", tone="", ids=""):
+    """`ids` is set on the one tile JavaScript has to keep updating: the age
+    of the last run changes every minute the page sits open, and a value
+    baked in at build time would be wrong the moment after it was written."""
+    attr = f' id="{ids}"' if ids else ""
+    val_id = ' id="age-val"' if ids == "age-tile" else ""
+    return (f'<div class="tile {tone}"{attr}><div class="tl">{label}</div>'
+            f'<div class="tv"{val_id}>{value}</div><div class="ts">{sub}</div></div>')
 
 
 def _esc(s) -> str:
@@ -145,7 +151,8 @@ def build_html(state: dict = None, history: list = None,
               "good" if open_pl > 0 else ("bad" if open_pl < 0 else "")),
         _tile("Cash", f"${cash:,.2f}", "uninvested"),
         _tile("Last run", age_str,
-              f"{len(orders)} order(s), {len(vetoes)} blocked", age_sev),
+              f"{len(orders)} order(s), {len(vetoes)} blocked", age_sev,
+              ids="age-tile"),
     ])
 
     # -- positions ----------------------------------------------------------
@@ -220,6 +227,7 @@ def build_html(state: dict = None, history: list = None,
 
     stamp = (f"Generated {state['updated_at']} UTC from the agent's own run records"
              if state.get("updated_at") else "This page has not been generated from a real run yet")
+    built_iso = str(state.get("updated_at") or "")
 
     return f"""<!doctype html>
 <html lang="en">
@@ -227,6 +235,12 @@ def build_html(state: dict = None, history: list = None,
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
+<!-- Added to a phone home screen this runs as a standalone app, and iOS will
+     happily serve the copy it cached the day you added it. The script at the
+     bottom checks for a newer run and reloads past that cache. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Agent">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <title>{_esc(title)}</title>
 <style>
   :root {{
@@ -314,7 +328,7 @@ def build_html(state: dict = None, history: list = None,
 
   <nav class="sitenav"><a href="./floor.html">How a run works &rarr;</a></nav>
 
-  {banner}
+  <div id="banners">{banner}</div>
 
   <div class="tiles">{tiles}</div>
 
@@ -341,6 +355,82 @@ def build_html(state: dict = None, history: list = None,
   </footer>
 </div>
 <script>
+/* ---------------------------------------------------------------------------
+   Freshness, computed in the browser rather than baked into the page.
+
+   The age of the last run was previously written into the HTML by Python at
+   the moment the page was generated, so it read "0 min ago" forever after.
+   That is the single most misleading thing a monitoring page can do: it made
+   a day-old snapshot look live. Both problems are fixed here.
+
+   1. The age is recomputed from a fixed timestamp every time the page is
+      opened, and every minute it stays open.
+   2. A tiny data.json is fetched with caching disabled. If the agent has run
+      since this copy of the page was built, the browser is sent to a URL it
+      has never seen, which is the only reliable way past an iOS home-screen
+      cache.
+--------------------------------------------------------------------------- */
+(function () {{
+  var BUILT = "{built_iso}";
+
+  function ageParts(iso) {{
+    if (!iso) return {{ text: "never run", hrs: 1e9, sev: "warning" }};
+    var t = Date.parse(iso);
+    if (isNaN(t)) return {{ text: "unknown", hrs: 1e9, sev: "critical" }};
+    var hrs = (Date.now() - t) / 3600000;
+    if (hrs < 0) hrs = 0;
+    var text = hrs < 1 ? Math.round(hrs * 60) + " min ago"
+             : hrs < 48 ? Math.round(hrs) + " hours ago"
+             : Math.round(hrs / 24) + " days ago";
+    var sev = hrs < 30 ? "good" : (hrs < 96 ? "warning" : "critical");
+    return {{ text: text, hrs: hrs, sev: sev }};
+  }}
+
+  function paint() {{
+    var a = ageParts(BUILT);
+    var val = document.getElementById("age-val");
+    var tile = document.getElementById("age-tile");
+    if (val) val.textContent = a.text;
+    if (tile) tile.className = "tile " + a.sev;
+
+    var host = document.getElementById("banners");
+    if (!host) return;
+    var old = document.getElementById("stale-banner");
+    if (old) old.parentNode.removeChild(old);
+    if (a.hrs > 30 && BUILT) {{
+      var b = document.createElement("div");
+      b.id = "stale-banner";
+      b.className = "banner " + (a.hrs > 96 ? "critical" : "warning");
+      b.innerHTML = (a.hrs > 96
+        ? "<strong>Stale.</strong> The agent last ran " + a.text +
+          ". Nothing on this page is current. Check that the scheduled run is still working."
+        : "<strong>Getting old.</strong> Last run " + a.text +
+          ". Fine over a weekend or a market holiday, not fine on a Wednesday.");
+      host.insertBefore(b, host.firstChild);
+    }}
+  }}
+
+  paint();
+  setInterval(paint, 60000);
+
+  function checkForNewer() {{
+    fetch("./data.json?t=" + Date.now(), {{ cache: "no-store" }})
+      .then(function (r) {{ return r.ok ? r.json() : null; }})
+      .then(function (d) {{
+        if (d && d.updated_at && d.updated_at !== BUILT) {{
+          location.replace("./index.html?v=" + encodeURIComponent(d.updated_at));
+        }}
+      }})
+      .catch(function () {{ /* opened from a file, or offline: keep what we have */ }});
+  }}
+
+  checkForNewer();
+  // Coming back to a home-screen app does not reload it, so check again.
+  document.addEventListener("visibilitychange", function () {{
+    if (!document.hidden) {{ paint(); checkForNewer(); }}
+  }});
+}})();
+
 (function(){{
   var pts = {pts};
   var card = document.getElementById('c1'), tip = document.getElementById('t1');
@@ -382,4 +472,16 @@ def build_html(state: dict = None, history: list = None,
 def write_dashboard(title: str = "Trading agent") -> Path:
     path = SITE / "index.html"
     path.write_text(build_html(title=title))
+
+    # A tiny companion file the page can poll without downloading itself.
+    # This is what lets a phone notice a new run has happened even when it is
+    # showing a cached copy of the page.
+    st = load_state()
+    (SITE / "data.json").write_text(json.dumps({
+        "updated_at": st.get("updated_at"),
+        "mode": st.get("mode"),
+        "equity": (st.get("account") or {}).get("equity"),
+        "positions": len(st.get("positions") or []),
+        "orders": len(st.get("orders") or []),
+    }, indent=2))
     return path
