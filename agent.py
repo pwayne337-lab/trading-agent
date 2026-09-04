@@ -34,7 +34,8 @@ from tbot.config import DEFAULT_WATCHLIST, AgentConfig
 from tbot.dashboard import write_dashboard
 from tbot.research import Researcher, screen
 from tbot.risk import correlation_block, size_position
-from tbot.strategy import exit_decision, latest_signal, trend_state
+from tbot import ranking
+from tbot.strategy import exit_decision, latest_signal, prepare, trend_state
 
 
 def load_dotenv():
@@ -257,12 +258,30 @@ def cmd_run(args):
     returns = pd.DataFrame({s: d["close"].pct_change() for s, d in bars.items()})
     committed = set(held)   # grows as this run takes positions
 
+    # Collect every candidate first, then rank them, because there are almost
+    # always more setups than free slots and whatever decides that ordering
+    # matters more than the entry rules do. The backtest uses this same
+    # function, so the two agree on which trades they would take.
+    candidates = []
     for sym, df in sorted(bars.items()):
         if sym in held:
             continue
         sig = latest_signal(sym, df, cfg.strategy)
         if sig is None:
             continue
+        prepared = prepare(df, cfg.strategy)
+        candidates.append((sym, sig, ranking.score(
+            cfg.strategy.rank_by, prepared, len(prepared) - 1, sig.stop)))
+
+    ranked = ranking.order([(c[0], c[2]) for c in candidates], cfg.strategy.rank_by)
+    by_symbol = {c[0]: c[1] for c in candidates}
+    if cfg.strategy.rank_by != "none" and len(ranked) > 1:
+        print(f"Ranking {len(ranked)} candidates by {cfg.strategy.rank_by}: "
+              f"{', '.join(ranked)}\n")
+
+    for sym in ranked:
+        sig = by_symbol[sym]
+        df = bars[sym]
 
         order = size_position(equity, sig.reference_close, sig.stop, cfg.risk,
                               cfg.strategy, open_positions=open_count,
@@ -422,6 +441,39 @@ def cmd_journal(args):
     print(journal.format_report(journal.analyze(df)))
 
 
+def cmd_evolve(args):
+    """Test whether re-tuning the settings actually beats leaving them alone."""
+    from tbot import evolve
+
+    cfg = build_config(args)
+    print(f"Loading {len(cfg.watchlist)} symbols from {args.start}...")
+    bars = datamod.load_universe(cfg.watchlist, start=args.start,
+                                 refresh=args.refresh)
+    print(f"Loaded {len(bars)}. Running walk-forward test, this takes "
+          f"a few minutes.\n")
+
+    params = ([p.strip() for p in args.params.split(",")] if args.params
+              else list(evolve.SEARCH_SPACE.keys()))
+    bad = [p for p in params if p not in evolve.SEARCH_SPACE]
+    if bad:
+        print(f"Not tunable: {bad}. Allowed: {list(evolve.SEARCH_SPACE)}")
+        return
+
+    seen = []
+    def progress(msg):
+        if msg not in seen:
+            seen.append(msg)
+            print(f"  {msg}")
+
+    results = evolve.walk_forward(bars, cfg, params=params,
+                                  n_windows=args.windows,
+                                  train_years=args.train_years,
+                                  test_years=args.test_years,
+                                  progress=progress)
+    v = evolve.verdict(results)
+    print(evolve.format_report(results, v))
+
+
 def cmd_dashboard(args):
     page = write_dashboard()
     print(f"Wrote {page}")
@@ -514,6 +566,14 @@ def main():
     j = sub.add_parser("journal", help="what your closed trades actually show")
     j.add_argument("--source", choices=["both", "live", "backtest"], default="both")
     j.set_defaults(func=cmd_journal)
+
+    ev = sub.add_parser("evolve", help="test whether re-tuning beats leaving it alone")
+    common(ev, start="2010-01-01")
+    ev.add_argument("--params", help="comma separated, default all tunable ones")
+    ev.add_argument("--windows", type=int, default=4)
+    ev.add_argument("--train-years", type=float, default=3.0)
+    ev.add_argument("--test-years", type=float, default=1.0)
+    ev.set_defaults(func=cmd_evolve)
 
     d = sub.add_parser("dashboard", help="rebuild the dashboard page")
     d.add_argument("--open", action="store_true", help="open it in your browser")

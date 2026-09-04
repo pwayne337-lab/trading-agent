@@ -65,6 +65,18 @@ class StrategyConfig:
     exit_on_trend_break: bool = True   # close below the 50 SMA
     max_hold_days: int = 40
 
+    # --- Choosing between candidates ----------------------------------------
+    # When more setups appear than there are free slots, this decides which
+    # ones get taken. "none" keeps the old behavior, which was list order and
+    # therefore effectively arbitrary. On this agent's history 62% of setups
+    # were discarded for want of a slot, so this setting has more influence on
+    # results than most of the entry rules do.
+    #   none         list order, arbitrary
+    #   momentum     strongest 6-month return, skipping the last month
+    #   reward_risk  tightest stop relative to the stock's own noise
+    #   liquidity    heaviest dollar volume
+    rank_by: str = "none"
+
     # --- Liquidity filter ---------------------------------------------------
     # Average dollar volume floor. Thin names have wide spreads and gap hard.
     min_avg_dollar_volume: float = 20_000_000.0

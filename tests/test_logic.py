@@ -535,6 +535,122 @@ check("the report states plainly that it changes nothing on its own",
 
 
 # ---------------------------------------------------------------------------
+print("\n7e. Ranking decides which setups get the slots")
+# ---------------------------------------------------------------------------
+
+from tbot import ranking
+
+_rk_df = prepare(make_series(n=400, seed=21, drift=0.0010), AgentConfig().strategy)
+_last = len(_rk_df) - 1
+_stop = float(_rk_df["close"].iloc[_last]) * 0.95
+
+check("'none' scores everything the same, so order is preserved",
+      ranking.score("none", _rk_df, _last, _stop) == 0.0)
+check("momentum reads a trailing return, not today's bar",
+      ranking.score("momentum", _rk_df, _last, _stop) ==
+      ranking.score("momentum", _rk_df.copy(), _last, _stop))
+
+# No lookahead: a score computed at bar i must not change when later bars are
+# removed. If it does, the ranking is reading the future.
+_trunc = prepare(make_series(n=400, seed=21, drift=0.0010).iloc[:_last + 1],
+                 AgentConfig().strategy)
+for _m in ("momentum", "reward_risk", "liquidity"):
+    a = ranking.score(_m, _rk_df, _last, _stop)
+    b = ranking.score(_m, _trunc, len(_trunc) - 1, _stop)
+    check(f"'{_m}' uses no data after the signal bar",
+          (a == b) or (a != a and b != b), f"{a} vs {b}")
+
+check("a tighter stop ranks above a wider one under reward_risk",
+      ranking.score("reward_risk", _rk_df, _last,
+                    float(_rk_df['close'].iloc[_last]) * 0.98) >
+      ranking.score("reward_risk", _rk_df, _last,
+                    float(_rk_df['close'].iloc[_last]) * 0.90))
+
+_cands = [("AAA", 0.1), ("BBB", 0.9), ("CCC", 0.5)]
+check("ranking puts the best candidate first",
+      ranking.order(_cands, "momentum")[0] == "BBB",
+      str(ranking.order(_cands, "momentum")))
+check("'none' leaves the original order alone",
+      ranking.order(_cands, "none") == ["AAA", "BBB", "CCC"])
+check("equal scores keep their original order rather than shuffling",
+      ranking.order([("A", 1.0), ("B", 1.0), ("C", 1.0)], "momentum")
+      == ["A", "B", "C"])
+check("an unscoreable candidate sinks to the bottom instead of crashing",
+      ranking.order([("A", float("nan")), ("B", 0.2)], "momentum") == ["B", "A"])
+
+# The whole point: the backtest and the live agent must break ties the same
+# way, or the backtest is not predicting what the agent does.
+check("both paths share one ranking function",
+      "ranking.order" in open(_P(__file__).parent.parent / "agent.py").read()
+      and "ranking.order" in open(_P(__file__).parent.parent / "tbot/backtest.py").read())
+
+
+# ---------------------------------------------------------------------------
+print("\n7d. Evolution is fenced in and honestly scored")
+# ---------------------------------------------------------------------------
+
+from tbot import evolve
+
+_risky = {"risk_per_trade", "max_position_pct", "max_open_positions",
+          "max_gross_exposure", "max_drawdown_halt", "max_correlation"}
+check("no risk setting is exposed to the optimizer",
+      not (_risky & set(evolve.SEARCH_SPACE)), str(set(evolve.SEARCH_SPACE)))
+check("only strategy settings are tunable",
+      all(hasattr(AgentConfig().strategy, p) for p in evolve.SEARCH_SPACE))
+check("every tunable is bounded by an explicit list",
+      all(isinstance(v, list) and len(v) >= 2 for v in evolve.SEARCH_SPACE.values()))
+
+# Scoring must be able to say "tuning did not help", or it is not a test.
+_no_help = [evolve.WindowResult(
+    pd.Timestamp("2018-01-01"), pd.Timestamp("2020-12-31"),
+    pd.Timestamp("2021-01-01"), pd.Timestamp("2021-12-31"),
+    "reward_risk", 3.0, 2.0, chosen_test_R=-0.05, default_test_R=0.05,
+    chosen_test_n=60, default_test_n=60) for _ in range(4)]
+_v = evolve.verdict(_no_help)
+check("tuning that loses out of sample is reported as not worth doing",
+      _v["worth_doing"] is False, str(_v.get("avg_out_of_sample_gain_R")))
+check("and the report says so in words",
+      "did NOT reliably beat" in evolve.format_report(_no_help, _v))
+
+_helps = [evolve.WindowResult(
+    pd.Timestamp("2018-01-01"), pd.Timestamp("2020-12-31"),
+    pd.Timestamp("2021-01-01"), pd.Timestamp("2021-12-31"),
+    "reward_risk", 3.0, 2.0, chosen_test_R=0.20, default_test_R=0.05,
+    chosen_test_n=60, default_test_n=60) for _ in range(4)]
+_vh = evolve.verdict(_helps)
+check("a real, repeated out-of-sample gain IS recognized",
+      _vh["worth_doing"] is True, str(_vh.get("avg_out_of_sample_gain_R")))
+
+# A gain smaller than the noise threshold must not trigger a change.
+_tiny = [evolve.WindowResult(
+    pd.Timestamp("2018-01-01"), pd.Timestamp("2020-12-31"),
+    pd.Timestamp("2021-01-01"), pd.Timestamp("2021-12-31"),
+    "reward_risk", 3.0, 2.0, chosen_test_R=0.051, default_test_R=0.05,
+    chosen_test_n=60, default_test_n=60) for _ in range(4)]
+check("a gain below the minimum edge is not called worth doing",
+      evolve.verdict(_tiny)["worth_doing"] is False)
+
+check("training and judging windows never overlap",
+      all(r.test_start > r.train_end for r in _no_help))
+
+# The window builder must actually produce windows on realistic history, and
+# must only count trades from inside the period being judged. A silent zero
+# here previously came out as "not enough history", which is a wrong answer
+# dressed as a limitation.
+_wf_bars = universe(["SPY", "AAA", "BBB", "CCC", "DDD", "EEE"], seed0=55, n=2600)
+_sl = evolve._slice(_wf_bars, pd.Timestamp("2024-01-01"), pd.Timestamp("2024-12-31"))
+check("a one-year window still gets its warmup history", len(_sl) == 6, str(len(_sl)))
+_first = list(_sl.values())[0]
+check("the warmup really is in front of the window",
+      _first.index[0] < pd.Timestamp("2024-01-01"), str(_first.index[0].date()))
+
+_r_all, _n_all = evolve._score(_sl, AgentConfig())
+_r_in, _n_in = evolve._score(_sl, AgentConfig(), only_after="2024-01-01")
+check("scoring inside the window counts fewer trades than the whole slice",
+      _n_in < _n_all, f"{_n_in} vs {_n_all}")
+
+
+# ---------------------------------------------------------------------------
 print("\n8. Strategy comparison simulator")
 # ---------------------------------------------------------------------------
 

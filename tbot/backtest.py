@@ -24,6 +24,7 @@ from typing import Dict, List, Optional
 import numpy as np
 import pandas as pd
 
+from . import ranking
 from .config import AgentConfig
 from .risk import (DrawdownMonitor, apply_slippage, commission,
                    correlation_block, size_position)
@@ -98,6 +99,7 @@ class PendingEntry:
     atr: float = float("nan")
     pct_from_ema: float = float("nan")
     regime: Optional[bool] = None
+    rank_score: float = 0.0
 
 
 class Backtest:
@@ -234,7 +236,14 @@ class Backtest:
         equity = self._equity(date)
         halted = self.dd.tripped
 
-        for sym in list(self.pending.keys()):
+        # Best candidates first. With only a handful of slots, this decides
+        # which setups become trades and which are discarded, so it uses the
+        # same function the live agent uses.
+        queued = ranking.order(
+            [(s, p.rank_score) for s, p in self.pending.items()],
+            self.cfg.strategy.rank_by)
+
+        for sym in queued:
             pend = self.pending.pop(sym)
             if sym in self.positions:
                 continue
@@ -330,7 +339,9 @@ class Backtest:
                     pass
                 self.pending[sym] = PendingEntry(
                     sym, date, sig.stop, atr=sig.atr, pct_from_ema=pct_ema,
-                    regime=self._regime(date))
+                    regime=self._regime(date),
+                    rank_score=ranking.score(self.cfg.strategy.rank_by,
+                                             self.data[sym], i, sig.stop))
 
     # -- main loop ----------------------------------------------------------
 
