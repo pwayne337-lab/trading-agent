@@ -1,61 +1,74 @@
 {
-  "updated_at": "2026-09-03T23:18:17+00:00",
+  "updated_at": "2026-09-04T21:48:50+00:00",
   "mode": "paper",
-  "healthy": true,
+  "healthy": false,
   "account": {
-    "equity": 100000.0,
-    "cash": 100000.0,
-    "buying_power": 350934.45,
+    "equity": 99812.49,
+    "cash": 50896.44,
+    "buying_power": 340550.71,
     "status": "ACTIVE",
     "pattern_day_trader": null,
     "trading_blocked": false,
     "mode": "PAPER"
   },
-  "positions": [],
-  "signals": [
-    {
-      "symbol": "DIA",
-      "entry": 536.93,
-      "stop": 526.3732,
-      "target": 558.0436,
-      "shares": 46
-    },
-    {
-      "symbol": "QQQ",
-      "entry": 717.67,
-      "stop": 703.6832,
-      "target": 745.6435,
-      "shares": 34
-    }
-  ],
-  "vetoes": [],
-  "orders": [
+  "positions": [
     {
       "symbol": "DIA",
       "shares": 46,
-      "stop": 526.3732,
-      "target": 558.0436,
-      "dollars_at_risk": 485.61,
-      "order_id": "cb3b2a05-fbcf-4f0a-9d24-340038d02dee"
+      "avg_entry": 536.144783,
+      "market_value": 24508.8,
+      "unrealized_pl": -153.860018
     },
     {
       "symbol": "QQQ",
       "shares": 34,
-      "stop": 703.6832,
-      "target": 745.6435,
-      "dollars_at_risk": 475.55,
-      "order_id": "2974c2d8-682d-4fba-983a-bc0b7fb91d6f"
+      "avg_entry": 718.85,
+      "market_value": 24407.2536,
+      "unrealized_pl": -33.6464
     }
   ],
-  "skipped": [
+  "signals": [],
+  "vetoes": [],
+  "orders": [],
+  "exits": [],
+  "skipped": [],
+  "findings": [
     {
-      "symbol": "XLK",
-      "reason": "moves almost identically to QQQ (0.96 correlation)"
+      "severity": "critical",
+      "agent": "data",
+      "message": "stale prices, newest bar is old: EA (19d)"
+    },
+    {
+      "severity": "critical",
+      "agent": "data",
+      "message": "price frozen for 5 bars, feed may be stuck: EA"
+    },
+    {
+      "severity": "critical",
+      "agent": "reconcile",
+      "message": "UNPROTECTED: no stop order behind DIA, QQQ. These positions have no exit working at the broker."
+    },
+    {
+      "severity": "warning",
+      "agent": "data",
+      "message": "2 symbol(s) failed to load: FI, MMC"
+    },
+    {
+      "severity": "info",
+      "agent": "reconcile",
+      "message": "new since last run: DIA, QQQ"
     }
   ],
   "briefing": "Research is off. Add ANTHROPIC_API_KEY to your .env file to get a written briefing here.",
   "recent_trades": [],
-  "errors": [],
+  "errors": [
+    "stale prices, newest bar is old: EA (19d)",
+    "price frozen for 5 bars, feed may be stuck: EA",
+    "UNPROTECTED: no stop order behind DIA, QQQ. These positions have no exit working at the broker.",
+    "no record of which strategy opened DIA, managing it with the pullback exits",
+    "no record of which strategy opened QQQ, managing it with the pullback exits"
+  ],
+  "strategy_by_symbol": {},
   "research": {
     "llm_calls": 0,
     "llm_errors": 0,

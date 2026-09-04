@@ -97,18 +97,28 @@
 
   <nav class="sitenav"><a href="./floor.html">How a run works &rarr;</a></nav>
 
-  <div id="banners"></div>
+  <div id="banners"><div class="banner critical"><strong>Needs attention.</strong> stale prices, newest bar is old: EA (19d)</div><div class="banner critical"><strong>Needs attention.</strong> price frozen for 5 bars, feed may be stuck: EA</div><div class="banner critical"><strong>Needs attention.</strong> UNPROTECTED: no stop order behind DIA, QQQ. These positions have no exit working at the broker.</div><div class="banner warning"><strong>Worth a look.</strong> 2 symbol(s) failed to load: FI, MMC</div></div>
 
-  <div class="tiles"><div class="tile "><div class="tl">Account equity</div><div class="tv">$100,000.00</div><div class="ts">paper account &middot; 1 run(s) recorded</div></div><div class="tile "><div class="tl">Today</div><div class="tv">+0.00%</div><div class="ts">since the previous run</div></div><div class="tile "><div class="tl">Since start</div><div class="tv">+0.00%</div><div class="ts">of tracking</div></div><div class="tile "><div class="tl">Open positions</div><div class="tv">0</div><div class="ts">open P&amp;L $+0.00</div></div><div class="tile "><div class="tl">Cash</div><div class="tv">$100,000.00</div><div class="ts">uninvested</div></div><div class="tile good" id="age-tile"><div class="tl">Last run</div><div class="tv" id="age-val">14 hours ago</div><div class="ts">2 order(s), 0 blocked</div></div></div>
+  <div class="tiles"><div class="tile "><div class="tl">Account equity</div><div class="tv">$99,812.49</div><div class="ts">paper account &middot; 2 run(s) recorded</div></div><div class="tile bad"><div class="tl">Today</div><div class="tv">-0.19%</div><div class="ts">since the previous run</div></div><div class="tile bad"><div class="tl">Since start</div><div class="tv">-0.19%</div><div class="ts">of tracking</div></div><div class="tile bad"><div class="tl">Open positions</div><div class="tv">2</div><div class="ts">open P&amp;L $-187.51</div></div><div class="tile "><div class="tl">Cash</div><div class="tv">$50,896.44</div><div class="ts">uninvested</div></div><div class="tile good" id="age-tile"><div class="tl">Last run</div><div class="tv" id="age-val">0 min ago</div><div class="ts">0 order(s), 0 blocked</div></div></div>
 
   <h2>Account equity</h2>
-  <div class="card empty">Not enough history to plot yet. The chart appears after the agent has run on two separate days.</div>
+  <div class="card" id="c1"><svg viewBox="0 0 920 280" class="chart" role="img" preserveAspectRatio="none">
+  <line x1="62" y1="250.0" x2="904" y2="250.0" stroke="var(--gridline)" stroke-width="1"/><line x1="62" y1="191.5" x2="904" y2="191.5" stroke="var(--gridline)" stroke-width="1"/><line x1="62" y1="133.0" x2="904" y2="133.0" stroke="var(--gridline)" stroke-width="1"/><line x1="62" y1="74.5" x2="904" y2="74.5" stroke="var(--gridline)" stroke-width="1"/><line x1="62" y1="16.0" x2="904" y2="16.0" stroke="var(--gridline)" stroke-width="1"/>
+  
+  <polyline points="62.00,32.14 904.00,233.86" fill="none" stroke="var(--series-1)" stroke-width="2"
+            stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+  <text x="54" y="254.0" text-anchor="end" class="tick">$99,797</text><text x="54" y="195.5" text-anchor="end" class="tick">$99,852</text><text x="54" y="137.0" text-anchor="end" class="tick">$99,906</text><text x="54" y="78.5" text-anchor="end" class="tick">$99,961</text><text x="54" y="20.0" text-anchor="end" class="tick">$100,015</text><text x="62.0" y="272" text-anchor="start" class="tick">09-03</text><text x="904.0" y="272" text-anchor="middle" class="tick">09-04</text><text x="904.0" y="272" text-anchor="end" class="tick">09-04</text>
+  <line class="crosshair" x1="0" y1="16" x2="0" y2="250"
+        stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 3" opacity="0"/>
+  <circle class="cursor-dot" r="4" fill="var(--series-1)" stroke="var(--surface-1)"
+          stroke-width="2" opacity="0"/>
+</svg><div class="tip" id="t1"></div></div>
 
   <h2>Open positions</h2>
-  <div class="card empty">Holding nothing right now.</div>
+  <div class="card scroll"><table><thead><tr><th>Symbol</th><th class="n">Shares</th><th class="n">Avg cost</th><th class="n">Value</th><th class="n">Open P&amp;L</th></tr></thead><tbody><tr><td><strong>DIA</strong></td><td class='n'>46</td><td class='n'>$536.14</td><td class='n'>$24,508.80</td><td class='n neg'>$-153.86</td></tr><tr><td><strong>QQQ</strong></td><td class='n'>34</td><td class='n'>$718.85</td><td class='n'>$24,407.25</td><td class='n neg'>$-33.65</td></tr></tbody></table></div>
 
   <h2>What the agent did on its last run</h2>
-  <div class="card"><ul class="events"><li class="ev ok"><span class="tag">bought</span> <strong>DIA</strong> 46 sh, stop $526.37, target $558.04, risking $485.61</li><li class="ev ok"><span class="tag">bought</span> <strong>QQQ</strong> 34 sh, stop $703.68, target $745.64, risking $475.55</li><li class="ev skip"><span class="tag">skipped</span> <strong>XLK</strong> moves almost identically to QQQ (0.96 correlation)</li></ul></div>
+  <div class="card"><ul class="events"><li class="ev quiet">No setups met the rules. Most days look like this.</li></ul></div>
 
   <h2>Briefing</h2>
   <div class="card brief"><p>Research is off. Add ANTHROPIC_API_KEY to your .env file to get a written briefing here.</p></div>
@@ -117,7 +127,7 @@
   <div class="card empty">No closed trades yet.</div>
 
   <footer>
-    Generated 2026-09-03T23:18:17+00:00 UTC from the agent's own run records.
+    Generated 2026-09-04T21:48:50+00:00 UTC from the agent's own run records.
     Numbers update only when the agent runs; this page does not poll anything.<br>
     A paper account is fake money. Results here are not a prediction of what
     real money would do, and past results do not tell you what comes next.
@@ -140,7 +150,7 @@
       cache.
 --------------------------------------------------------------------------- */
 (function () {
-  var BUILT = "2026-09-03T23:18:17+00:00";
+  var BUILT = "2026-09-04T21:48:50+00:00";
 
   function ageParts(iso) {
     if (!iso) return { text: "never run", hrs: 1e9, sev: "warning" };
@@ -201,7 +211,7 @@
 })();
 
 (function(){
-  var pts = [];
+  var pts = [{"x": 62.0, "y": 32.14, "d": "09-03", "v": 100000.0}, {"x": 904.0, "y": 233.86, "d": "09-04", "v": 99812.49}];
   var card = document.getElementById('c1'), tip = document.getElementById('t1');
   if (!card || !pts.length) return;
   var svg = card.querySelector('svg');
