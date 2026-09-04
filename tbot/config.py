@@ -103,9 +103,18 @@ class RiskConfig:
     max_gross_exposure: float = 1.00
 
     # Circuit breaker. If the account is this far below its high water mark,
-    # the agent stops opening new trades and tells you. It does not decide on
-    # its own when to start again.
+    # the agent stops opening new trades and says so on the dashboard.
     max_drawdown_halt: float = 0.20
+
+    # It starts taking trades again once the account has recovered to within
+    # this much of its high water mark. Without a resume level the breaker is
+    # a one-way switch that retires the strategy after a single bad stretch.
+    resume_below: float = 0.10
+
+    # And it resumes anyway after this many sessions, because a halted
+    # strategy holds nothing, so its equity cannot recover, so recovery alone
+    # would never arrive. Roughly three months.
+    halt_cooldown_days: int = 60
 
 
 @dataclass

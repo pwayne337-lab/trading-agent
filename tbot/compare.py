@@ -59,6 +59,20 @@ CASH = "SHY"              # 1-3 year treasuries, the "safe" sleeve
 
 EXTRA_ASSETS = [BENCHMARK, INTERNATIONAL, BONDS, CASH]
 
+# A universe that does not cheat.
+#
+# Running momentum over a watchlist of today's mega caps is not a test, it is
+# a memory. Whoever wrote the list already knows which companies won, so the
+# backtest inherits that knowledge and reports it as skill. The tell is that
+# holding the whole list equally, with no strategy at all, also beats the
+# index by a mile.
+#
+# These are broad index and sector funds that all existed and were freely
+# buyable in 2005. Nobody had to know anything about the future to pick this
+# list, so a momentum result on it means something.
+HONEST_UNIVERSE = ["SPY", "QQQ", "IWM", "DIA", "XLK", "XLF", "XLE", "XLV",
+                   "SMH", INTERNATIONAL, BONDS]
+
 TRADING_DAYS = 252
 
 
@@ -299,12 +313,28 @@ def run_all(bars: Dict[str, pd.DataFrame], watchlist: List[str],
             pullback_equity: Optional[pd.Series] = None) -> List[Entry]:
     prices = close_matrix(bars)
 
+    # Every strategy has to be measured over the same window as the benchmark,
+    # or the table compares a 20-year record against an 8-year one and calls
+    # it a ranking. If some symbols have deeper history than SPY does, the
+    # extra years are dropped rather than silently given to one strategy.
+    if BENCHMARK in prices.columns:
+        have = prices[BENCHMARK].dropna()
+        if len(have):
+            prices = prices[prices.index >= have.index[0]]
+
+    honest = [s for s in HONEST_UNIVERSE if s in prices.columns]
+
     specs = [
         ("Buy and hold SPY", w_buy_hold(prices)),
         ("200-day trend filter", w_trend_filter(prices)),
         ("Dual momentum", w_dual_momentum(prices)),
-        ("Momentum, top 5", w_xs_momentum(prices, watchlist, top_n=5)),
-        ("Equal weight watchlist", w_equal_weight(prices, watchlist)),
+    ]
+    if len(honest) >= 6:
+        specs.append(("Momentum, sector ETFs (clean)",
+                      w_xs_momentum(prices, honest, top_n=3)))
+    specs += [
+        ("Momentum, top 5 (biased)", w_xs_momentum(prices, watchlist, top_n=5)),
+        ("Equal weight watchlist (biased)", w_equal_weight(prices, watchlist)),
     ]
 
     out = []

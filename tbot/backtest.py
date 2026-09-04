@@ -96,7 +96,10 @@ class Backtest:
         self.pending: Dict[str, PendingEntry] = {}
         self.closed: List[Trade] = []
         self.equity_curve: List[dict] = []
-        self.dd = DrawdownMonitor(cfg.risk.starting_equity, cfg.risk.max_drawdown_halt)
+        self.dd = DrawdownMonitor(cfg.risk.starting_equity,
+                                  cfg.risk.max_drawdown_halt,
+                                  cfg.risk.resume_below,
+                                  cfg.risk.halt_cooldown_days)
         self.halt_days = 0
 
         all_dates = sorted(set().union(*[set(df.index) for df in self.data.values()]))

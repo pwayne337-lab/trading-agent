@@ -377,6 +377,14 @@ def cmd_compare(args):
     idx = entries[0].sim.index
     split = args.split or str(idx[int(len(idx) * 0.55)].date())
 
+    short = sorted(s for s, d in bars.items()
+                   if d.index[0] > pd.Timestamp(args.start) + pd.Timedelta(days=45))
+    if short:
+        tail = "" if args.refresh else " Re-run with --refresh if that looks wrong."
+        print(f"NOTE: {len(short)} symbol(s) start later than {args.start}: "
+              f"{', '.join(short)}. Usually that just means the company or fund "
+              f"did not exist yet.{tail}\n")
+
     full = cmp.table(entries)
     ins = cmp.table(entries, end=split)
     oos = cmp.table(entries, start=split)

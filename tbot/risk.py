@@ -143,18 +143,57 @@ def commission(shares: int, cfg_costs) -> float:
 
 
 class DrawdownMonitor:
-    """Tracks the high water mark and trips a breaker on a deep drawdown."""
+    """Tracks the high water mark and trips a breaker on a deep drawdown.
 
-    def __init__(self, starting_equity: float, limit: float):
+    The breaker re-arms once the account has climbed back to within
+    `resume_below` of its high water mark. That hysteresis matters: without
+    it, one bad stretch disables the strategy permanently. In a multi-year
+    backtest that silently flatlines the equity curve for the rest of the
+    test and reports the result as if the strategy simply stopped making
+    money, which is a lie about the strategy rather than a fact about it.
+    """
+
+    def __init__(self, starting_equity: float, limit: float,
+                 resume_below: float = 0.10, cooldown_days: int = 60):
         self.peak = starting_equity
         self.limit = limit
+        self.resume_below = min(resume_below, limit)
+        self.cooldown_days = cooldown_days
         self.tripped = False
+        self.trips = 0
+        self.days_tripped = 0
 
     def update(self, equity: float) -> bool:
         self.peak = max(self.peak, equity)
         dd = 0.0 if self.peak <= 0 else (self.peak - equity) / self.peak
-        if dd >= self.limit:
-            self.tripped = True
+
+        if not self.tripped:
+            if dd >= self.limit:
+                self.tripped = True
+                self.trips += 1
+                self.days_tripped = 1     # the day it tripped counts as day one
+            return self.tripped
+
+        # Recovering to within resume_below is the good exit, and it keeps the
+        # old high water mark because the loss was genuinely made back.
+        if dd <= self.resume_below:
+            self.tripped = False
+            self.days_tripped = 0
+            return False
+
+        # The other exit. A halted strategy holds nothing, so its equity stops
+        # moving, so its drawdown from the old peak never shrinks: recovery
+        # alone is a deadlock, because clearing the breaker requires trading
+        # and trading is what the breaker forbids. After the cooldown it
+        # resumes and the high water mark resets to where the account actually
+        # is. You have taken the loss; this is the new starting line, and the
+        # next 20% is measured from here rather than from a peak you may never
+        # see again.
+        self.days_tripped += 1
+        if self.days_tripped >= self.cooldown_days:
+            self.tripped = False
+            self.days_tripped = 0
+            self.peak = equity
         return self.tripped
 
     def drawdown(self, equity: float) -> float:

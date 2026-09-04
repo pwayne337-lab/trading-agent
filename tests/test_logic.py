@@ -139,6 +139,38 @@ o5 = size_position(10_000, entry=100.0, stop=98.0, cfg_risk=cfg.risk,
                    cfg_strategy=cfg.strategy, halted=True)
 check("drawdown breaker blocks new trades", not o5.ok, o5.rejected_reason or "")
 
+# The breaker must be able to un-trip. A one-way switch retires the strategy
+# after a single bad stretch and flatlines every backtest that hits it.
+from tbot.risk import DrawdownMonitor
+
+_dd = DrawdownMonitor(10_000, limit=0.20, resume_below=0.10, cooldown_days=60)
+check("no trip on a shallow drawdown", not _dd.update(9_000))
+check("trips at the limit", _dd.update(7_900))
+check("stays tripped part-way back up", _dd.update(8_800))
+check("re-arms once recovered inside the resume level", not _dd.update(9_100))
+check("can trip a second time later", _dd.update(7_000))
+check("counted both trips", _dd.trips == 2, f"trips={_dd.trips}")
+
+# The deadlock: a halted strategy holds nothing, so its equity stops moving,
+# so its drawdown never shrinks, so recovery alone never comes. Without a
+# cooldown the breaker is permanent and every long backtest flatlines.
+_stuck = DrawdownMonitor(10_000, limit=0.20, resume_below=0.10, cooldown_days=60)
+_stuck.update(7_500)
+check("frozen equity keeps the breaker tripped", _stuck.tripped)
+for _ in range(58):
+    _stuck.update(7_500)
+check("still halted one day before the cooldown ends", _stuck.tripped,
+      f"days={_stuck.days_tripped}")
+_stuck.update(7_500)
+check("the cooldown releases it even with no recovery at all",
+      not _stuck.tripped, f"days={_stuck.days_tripped}")
+
+_never = DrawdownMonitor(10_000, limit=0.20, resume_below=0.10, cooldown_days=60)
+_never.update(7_500)
+_halted_days = sum(1 for _ in range(500) if _never.update(7_500))
+check("a permanently flat account is not halted forever",
+      _halted_days < 120, f"halted {_halted_days} of 500 days")
+
 # Correlation guard: five copies of the same bet is one bet at five times
 # the size, and the sizing math does not know that unless we tell it.
 from tbot.risk import correlation_block
