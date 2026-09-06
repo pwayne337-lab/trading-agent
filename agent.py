@@ -243,24 +243,20 @@ def cmd_run(args):
 
     # --- the watchers, before any decision is made on this data -------------
     previous = state.load_state()
-    findings = watch.run_all(bars, cfg.watchlist, acct, positions, orders_open,
-                             previous, state.load_equity_history())
-    st["findings"] = [f.to_dict() for f in findings]
-    criticals = [f for f in findings if f.severity == watch.CRITICAL]
+    prior_equity = state.load_equity_history()
 
-    if findings:
-        print(f"Checks: {watch.summarize(findings)}")
-        for f in findings:
-            if f.severity != watch.INFO:
-                print(f"  [{f.severity.upper()}] {f.agent}: {f.message}")
-        print()
+    def look(orders):
+        found = watch.run_all(bars, cfg.watchlist, acct, positions, orders,
+                              previous, prior_equity)
+        if found:
+            print(f"Checks: {watch.summarize(found)}")
+            for f in found:
+                if f.severity != watch.INFO:
+                    print(f"  [{f.severity.upper()}] {f.agent}: {f.message}")
+            print()
+        return found
 
-    # A critical finding means the agent's picture of the world is wrong.
-    # Placing new orders on a wrong picture is how a small fault becomes an
-    # expensive one, so it manages what it already holds and stops there.
-    if criticals:
-        st["errors"] += [f.message for f in criticals]
-        print("Critical checks failed. No new positions will be opened this run.\n")
+    findings = look(orders_open)
 
     # --- put a stop behind anything that has none, before anything else -----
     # Detecting an unprotected position and then only writing it down leaves it
@@ -275,6 +271,7 @@ def cmd_run(args):
     # and it is wide enough to survive ordinary noise. It is a guess, but a
     # documented one, and a guessed stop beats no stop.
     exposed = watch.unprotected(positions, orders_open)
+    repaired = []
     for sym, shares in sorted(exposed.items()):
         df = bars.get(sym)
         if df is None or len(df) < cfg.strategy.atr_period + 2:
@@ -300,6 +297,32 @@ def cmd_run(args):
               f"({fill.status})")
         st["protected"].append({"symbol": sym, "shares": shares, "stop": level,
                                 "status": fill.status})
+        repaired.append(sym)
+
+    # The watchers judged a picture this run has since changed. Re-reading the
+    # broker is the only honest way to know whether the problem is still there:
+    # otherwise the agent refuses to trade all day on the strength of a finding
+    # it fixed itself two seconds earlier, and it would do that every run.
+    if repaired:
+        try:
+            orders_open = broker.open_orders()
+        except BrokerError as exc:
+            st["errors"].append(f"could not re-read orders after protecting: {exc}")
+        else:
+            print(f"Re-checking after protecting {', '.join(repaired)}.")
+            findings = look(orders_open)
+            held, working = committed_symbols(positions, orders_open)
+            held |= working
+
+    st["findings"] = [f.to_dict() for f in findings]
+    criticals = [f for f in findings if f.severity == watch.CRITICAL]
+
+    # A critical finding means the agent's picture of the world is wrong.
+    # Placing new orders on a wrong picture is how a small fault becomes an
+    # expensive one, so it manages what it already holds and stops there.
+    if criticals:
+        st["errors"] += [f.message for f in criticals]
+        print("Critical checks failed. No new positions will be opened this run.\n")
 
     # --- manage what is already open, before looking for anything new -------
     # The stop and target are live at the broker and need no help. These two

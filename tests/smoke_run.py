@@ -214,11 +214,14 @@ b, st = run(
 
 check("the position that lost its trend was closed", "DOWNTREND" in b.closed,
       str(b.closed))
-check("the watcher noticed that position had no stop behind it",
-      any("UNPROTECTED" in f["message"] for f in st["findings"]),
-      str(st["findings"]))
-check("an unprotected position stops new buying that run",
-      st["orders"] == [], str(st["orders"]))
+# This position arrives with no stop behind it, so the run covers it before
+# doing anything else, and only then closes it on the trend break. Protecting
+# something it is about to sell is not waste: if the close fails, that stop is
+# what stands between the position and the next gap down.
+check("the unprotected position was covered before it was closed",
+      [p["symbol"] for p in b.protected] == ["DOWNTREND"], str(b.protected))
+check("having fixed it, the run carries on and still trades",
+      st["orders"] != [], str(st["orders"]))
 check("the exit was recorded with a reason",
       len(st["exits"]) == 1 and "trend break" in st["exits"][0]["reason"],
       str(st["exits"]))
@@ -308,8 +311,18 @@ check("the stop sits below the market, so it cannot fire on submission",
       b.protected and b.protected[0]["stop"] < 100.0 * 5, str(b.protected))
 check("the repair is recorded in state", len(st.get("protected") or []) == 1,
       str(st.get("protected")))
-check("the watcher still reported the problem it fixed",
-      any("UNPROTECTED" in f["message"] for f in st["findings"]))
+# The finding must not survive the repair. The watchers judged a picture that
+# the run then changed, so re-reading the broker is the only honest way to know
+# whether the problem is still there. Without that, the agent refuses to trade
+# all day on the strength of a fault it fixed itself two seconds earlier, and
+# it does that every single run.
+check("the finding clears once the stop is on, so the run can keep working",
+      not [f for f in st["findings"] if "UNPROTECTED" in f["message"]],
+      str(st["findings"]))
+check("and the fixed problem is not left in the error list",
+      not [e for e in st["errors"] if "UNPROTECTED" in e], str(st["errors"]))
+check("the repair is still on the record even though the finding cleared",
+      len(st.get("protected") or []) == 1, str(st.get("protected")))
 
 # A position that already has a full stop must not collect a second one.
 _covered = run(
