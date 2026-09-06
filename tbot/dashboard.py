@@ -174,6 +174,15 @@ def build_html(state: dict = None, history: list = None,
 
     # -- today --------------------------------------------------------------
     items = []
+    # Repairs go first. When the agent both reports a problem and fixes it,
+    # the page has to say so, or the finding below reads as an open emergency
+    # that nobody dealt with.
+    for r in (state.get("protected") or []):
+        items.append(
+            f'<li class="ev fixed"><span class="tag">protected</span> '
+            f'<strong>{_esc(r.get("symbol"))}</strong> had no stop behind it. '
+            f'Placed one on {r.get("shares", 0)} sh at '
+            f'${float(r.get("stop") or 0):,.2f}.</li>')
     for e in (state.get("exits") or []):
         pl = e.get("unrealized_pl")
         pl_txt = f", P&amp;L ${float(pl):+,.2f}" if pl is not None else ""
@@ -321,6 +330,7 @@ def build_html(state: dict = None, history: list = None,
   .ev.ok .tag{{color:var(--good);border-color:var(--good)}}
   .ev.block .tag{{color:var(--critical);border-color:var(--critical)}}
   .ev.sold .tag{{color:var(--warning);border-color:var(--warning)}}
+  .ev.fixed .tag{{color:var(--good);border-color:var(--good)}}
   .brief p{{margin:0 0 10px}} .brief p:last-child{{margin:0}}
   footer{{margin-top:30px;color:var(--muted);font-size:11.5px;line-height:1.6}}
 </style>

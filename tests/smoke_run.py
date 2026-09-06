@@ -419,6 +419,50 @@ check("a missing symbol is reported",
       any("failed to load" in x.message
           for x in watch.check_data(build_bars(), list(build_bars()) + ["GONE"])))
 
+# --- how bad does one bad ticker have to be? -------------------------------
+# On a list of 200 names there is nearly always one that was renamed or
+# acquired last month. Treating that as an emergency halts the agent every day
+# over a symbol it was never going to trade.
+
+_many = list(build_bars()) + ["DEAD"] + [f"S{i}" for i in range(30)]
+_bars30 = dict(build_bars())
+for _i in range(30):
+    _bars30[f"S{_i}"] = build_bars()["FLAT"]
+
+_one_bad = watch.check_data(_bars30, _many)
+check("one dead ticker among many is a warning, not a halt",
+      _one_bad and not [x for x in _one_bad if x.severity == watch.CRITICAL],
+      str(_one_bad))
+check("and the message says the symbol is being skipped",
+      any("skipped" in x.message for x in _one_bad), str(_one_bad))
+
+# The same dead ticker IS critical when it is a position you are holding,
+# because the daily exits cannot be evaluated without its bars.
+_held_bad = watch.check_data(_bars30, _many, held=["DEAD"])
+check("a dead feed on a HELD position is critical",
+      any(x.severity == watch.CRITICAL for x in _held_bad), str(_held_bad))
+check("and it says why that matters", any("held position" in x.message
+      for x in _held_bad), str(_held_bad))
+
+# Losing a quarter of the list at once is a feed outage, not corporate actions.
+_outage = watch.check_data(build_bars(), list(build_bars()) + ["A", "B", "C", "D"])
+check("losing a large share of the watchlist at once is critical",
+      any(x.severity == watch.CRITICAL and "feed problem" in x.message
+          for x in _outage), str(_outage))
+
+# The flag and the behaviour must agree: whatever is reported unusable is
+# exactly what the trading path steps over.
+_unfit = watch.unfit_for_trading(_bars30, _many)
+check("the skip list contains the dead ticker", "DEAD" in _unfit, str(sorted(_unfit)))
+check("the skip list does not contain healthy symbols",
+      "UP" not in _unfit and "FLAT" not in _unfit, str(sorted(_unfit)))
+
+_stale_bars = dict(build_bars())
+_stale_bars["OLD"] = build_bars()["FLAT"].iloc[:-30]
+check("a stale symbol is on the skip list too",
+      "OLD" in watch.unfit_for_trading(_stale_bars, list(_stale_bars)),
+      str(sorted(watch.unfit_for_trading(_stale_bars, list(_stale_bars)))))
+
 _acct = {"equity": 100_000.0, "buying_power": 200_000.0, "trading_blocked": False}
 _naked = watch.check_broker(_acct, [{"symbol": "AAA", "market_value": 5_000}], [])
 check("a position with no sell order is critical",

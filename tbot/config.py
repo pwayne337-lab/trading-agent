@@ -53,6 +53,10 @@ DEFAULT_WATCHLIST: List[str] = [
     # Financials
     "JPM", "BAC", "WFC", "GS", "MS", "C", "SCHW", "BLK", "SPGI", "AXP",
     "V", "MA", "PYPL", "COF", "USB", "PNC", "CB", "PGR", "AIG", "MET",
+    # FISV, not FI: Fiserv moved back to Nasdaq under its original symbol on
+    # 11 November 2025. MRSH, not MMC: Marsh McLennan changed its NYSE symbol
+    # on 14 January 2026. Both were written from memory and both were wrong.
+    "FISV", "MRSH",
 
     # Healthcare
     "UNH", "LLY", "JNJ", "ABBV", "MRK", "PFE", "TMO", "ABT", "DHR", "AMGN",
@@ -80,7 +84,7 @@ DEFAULT_WATCHLIST: List[str] = [
     # this list: it was written from memory, and the only reliable way to find
     # a dead ticker is to watch for one.
     "TSLA", "GM", "F", "DIS", "CMCSA", "T", "VZ", "TMUS", "CHTR",
-    "BRK-B", "MMC", "AON", "ADP", "PAYX", "FI", "CTAS", "ORLY", "AZO", "YUM",
+    "BRK-B", "AON", "ADP", "PAYX", "CTAS", "ORLY", "AZO", "YUM",
 ]
 
 

@@ -362,9 +362,18 @@ def cmd_run(args):
     # always more setups than free slots and whatever decides that ordering
     # matters more than the entry rules do. The backtest uses this same
     # function, so the two agree on which trades they would take.
+    # Symbols whose data is not good enough to trade on. Flagging these and
+    # then scanning them anyway would mean the warning and the behaviour
+    # disagree, which is the same as having no warning.
+    unfit = watch.unfit_for_trading(bars, cfg.watchlist)
+    if unfit:
+        print(f"Skipping {len(unfit)} symbol(s) with unusable data: "
+              f"{', '.join(sorted(unfit)[:10])}"
+              + (" ..." if len(unfit) > 10 else "") + "\n")
+
     candidates = []
     for sym, df in sorted(bars.items()):
-        if sym in held:
+        if sym in held or sym in unfit:
             continue
         sig = latest_signal(sym, df, cfg.strategy)
         if sig is None:

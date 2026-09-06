@@ -697,6 +697,28 @@ datamod.CACHE_DIR = _cache_backup
 
 
 # ---------------------------------------------------------------------------
+print("\n7a-iii. The dashboard stylesheet cannot reference a colour that does not exist")
+# ---------------------------------------------------------------------------
+# var(--whatever) with no matching definition silently falls back to inherit.
+# Nothing errors, the page just quietly renders that element in the wrong
+# colour, and it stays that way until a person happens to look closely.
+import re as _re
+from tbot import dashboard as _dash
+
+_page = _dash.build_html(state={"mode": "paper", "updated_at": "2026-01-01T00:00:00+00:00",
+                                "account": {"equity": 100.0, "cash": 100.0},
+                                "protected": [{"symbol": "AAA", "shares": 5, "stop": 90.0}]},
+                         history=[])
+_defined = set(_re.findall(r"(--[a-z0-9-]+)\s*:", _page))
+_used = set(_re.findall(r"var\((--[a-z0-9-]+)", _page))
+_undef = sorted(_used - _defined)
+check("every colour token the page uses is actually defined",
+      not _undef, f"undefined: {_undef}")
+check("the page renders a repair the agent made", "protected" in _page)
+check("and says what the stop was set to", "90.00" in _page, "stop level missing")
+
+
+# ---------------------------------------------------------------------------
 print("\n7b-ii-b. Batched downloads must split the frame correctly")
 # ---------------------------------------------------------------------------
 # 194 symbols one at a time is 194 requests per run, which from a shared CI

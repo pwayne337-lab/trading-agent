@@ -58,26 +58,25 @@ def _biz_days_since(ts) -> Optional[int]:
 # 1. Data quality
 # ---------------------------------------------------------------------------
 
-def check_data(bars: Dict[str, pd.DataFrame], expected: List[str],
-               max_stale_days: int = 4, frozen_bars: int = 5) -> List[Finding]:
-    """Is the price data real, current and internally sensible?"""
-    out: List[Finding] = []
+def _data_problems(bars: Dict[str, pd.DataFrame], expected: List[str],
+                   max_stale_days: int = 4, frozen_bars: int = 5):
+    """The three ways a symbol's data can be unusable, as sorted lists.
 
+    One function so the report and the decision can never disagree about which
+    symbols are bad. A watcher that flags a symbol the trading path still acts
+    on is worse than no watcher.
+    """
     missing = sorted(set(expected) - set(bars))
-    if missing:
-        sev = CRITICAL if len(missing) > len(expected) * 0.2 else WARNING
-        out.append(Finding(sev, "data", f"{len(missing)} symbol(s) failed to "
-                                        f"load: {', '.join(missing[:8])}"))
+    stale, frozen, thin, weird = [], [], [], []
 
-    stale, frozen, weird = [], [], []
     for sym, df in bars.items():
         if df is None or len(df) < 2:
-            out.append(Finding(WARNING, "data", f"{sym}: almost no history"))
+            thin.append(sym)
             continue
 
         age = _biz_days_since(df.index[-1])
         if age is not None and age > max_stale_days:
-            stale.append(f"{sym} ({age}d)")
+            stale.append((sym, age))
 
         # A feed that stops updating often repeats the last value rather than
         # returning nothing, which looks like a very calm stock.
@@ -85,23 +84,88 @@ def check_data(bars: Dict[str, pd.DataFrame], expected: List[str],
         if len(tail) == frozen_bars and float(tail.std()) == 0.0:
             frozen.append(sym)
 
-        # A move this large is usually a split or dividend adjustment that
-        # landed wrong, not a real day. Worth a human glance either way.
         rets = df["close"].pct_change().tail(60).abs()
         if len(rets) and float(rets.max()) > 0.5:
-            weird.append(f"{sym} ({float(rets.max())*100:.0f}%)")
+            weird.append((sym, float(rets.max())))
 
+    return missing, sorted(stale), sorted(frozen), sorted(thin), sorted(weird)
+
+
+def unfit_for_trading(bars: Dict[str, pd.DataFrame], expected: List[str],
+                      max_stale_days: int = 4, frozen_bars: int = 5) -> set:
+    """Symbols whose data is not good enough to open a trade on.
+
+    Separate from the findings on purpose. A symbol with a dead feed should be
+    stepped over, not used as a reason to stop trading everything else.
+    """
+    missing, stale, frozen, thin, _ = _data_problems(
+        bars, expected, max_stale_days, frozen_bars)
+    return (set(missing) | {s for s, _ in stale} | set(frozen) | set(thin))
+
+
+def check_data(bars: Dict[str, pd.DataFrame], expected: List[str],
+               held: Optional[List[str]] = None,
+               max_stale_days: int = 4, frozen_bars: int = 5) -> List[Finding]:
+    """Is the price data real, current and internally sensible?
+
+    Severity is proportional on purpose. On a watchlist of two hundred names
+    there is nearly always one ticker that was renamed, acquired or delisted
+    last month, and treating that as an emergency would halt the agent every
+    single day over a symbol it was never going to trade. So a handful of bad
+    feeds is a warning and those symbols are skipped.
+
+    It becomes critical in the two cases that actually are: when the bad feed
+    belongs to a position already held, because the exits cannot be evaluated
+    without it, and when a large share of the whole list has gone bad at once,
+    because that is a feed outage rather than a corporate action.
+    """
+    out: List[Finding] = []
+    held_set = set(held or [])
+    missing, stale, frozen, thin, weird = _data_problems(
+        bars, expected, max_stale_days, frozen_bars)
+
+    bad = set(missing) | {s for s, _ in stale} | set(frozen) | set(thin)
+    share = len(bad) / max(len(expected), 1)
+    outage = share > 0.25
+    hits_held = sorted(bad & held_set)
+
+    def sev(symbols):
+        if held_set and set(symbols) & held_set:
+            return CRITICAL
+        return CRITICAL if outage else WARNING
+
+    if missing:
+        out.append(Finding(sev(missing), "data",
+                           f"{len(missing)} symbol(s) failed to load and will be "
+                           f"skipped: {', '.join(missing[:8])}"))
     if stale:
-        out.append(Finding(CRITICAL, "data",
-                           f"stale prices, newest bar is old: {', '.join(stale[:8])}"))
+        shown = ", ".join(f"{s} ({a}d)" for s, a in stale[:8])
+        out.append(Finding(sev([s for s, _ in stale]), "data",
+                           f"stale prices, newest bar is old, skipping: {shown}"))
     if frozen:
-        out.append(Finding(CRITICAL, "data",
+        out.append(Finding(sev(frozen), "data",
                            f"price frozen for {frozen_bars} bars, feed may be "
-                           f"stuck: {', '.join(frozen[:8])}"))
+                           f"stuck, skipping: {', '.join(frozen[:8])}"))
+    if thin:
+        out.append(Finding(sev(thin), "data",
+                           f"almost no history, skipping: {', '.join(thin[:8])}"))
+
+    if outage:
+        out.append(Finding(CRITICAL, "data",
+                           f"{len(bad)} of {len(expected)} symbols have unusable "
+                           f"data ({share*100:.0f}%). This is a feed problem, not "
+                           f"a handful of dead tickers."))
+    if hits_held:
+        out.append(Finding(CRITICAL, "data",
+                           f"the bad data covers held position(s): "
+                           f"{', '.join(hits_held)}. Their exits cannot be "
+                           f"evaluated."))
+
     if weird:
+        shown = ", ".join(f"{s} ({r*100:.0f}%)" for s, r in weird[:6])
         out.append(Finding(WARNING, "data",
                            f"a daily move over 50%, check for a bad split "
-                           f"adjustment: {', '.join(weird[:6])}"))
+                           f"adjustment: {shown}"))
     return out
 
 
@@ -317,7 +381,9 @@ def run_all(bars, expected, account, positions, open_orders,
             previous_state, history) -> List[Finding]:
     findings: List[Finding] = []
     findings += check_run_health(previous_state, history)
-    findings += check_data(bars, expected)
+    findings += check_data(
+        bars, expected,
+        held=[p.get("symbol") for p in (positions or []) if p.get("symbol")])
     findings += check_broker(account, positions, open_orders,
                              believed=(previous_state or {}).get("positions"))
     findings += check_positions_have_data(positions, bars)
