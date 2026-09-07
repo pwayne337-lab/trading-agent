@@ -1,72 +1,20 @@
 {
-  "updated_at": "2026-09-04T21:48:50+00:00",
+  "updated_at": "2026-09-07T04:48:47+00:00",
   "mode": "paper",
   "healthy": false,
-  "account": {
-    "equity": 99812.49,
-    "cash": 50896.44,
-    "buying_power": 340550.71,
-    "status": "ACTIVE",
-    "pattern_day_trader": null,
-    "trading_blocked": false,
-    "mode": "PAPER"
-  },
-  "positions": [
-    {
-      "symbol": "DIA",
-      "shares": 46,
-      "avg_entry": 536.144783,
-      "market_value": 24508.8,
-      "unrealized_pl": -153.860018
-    },
-    {
-      "symbol": "QQQ",
-      "shares": 34,
-      "avg_entry": 718.85,
-      "market_value": 24407.2536,
-      "unrealized_pl": -33.6464
-    }
-  ],
+  "account": {},
+  "positions": [],
   "signals": [],
   "vetoes": [],
   "orders": [],
   "exits": [],
+  "protected": [],
   "skipped": [],
-  "findings": [
-    {
-      "severity": "critical",
-      "agent": "data",
-      "message": "stale prices, newest bar is old: EA (19d)"
-    },
-    {
-      "severity": "critical",
-      "agent": "data",
-      "message": "price frozen for 5 bars, feed may be stuck: EA"
-    },
-    {
-      "severity": "critical",
-      "agent": "reconcile",
-      "message": "UNPROTECTED: no stop order behind DIA, QQQ. These positions have no exit working at the broker."
-    },
-    {
-      "severity": "warning",
-      "agent": "data",
-      "message": "2 symbol(s) failed to load: FI, MMC"
-    },
-    {
-      "severity": "info",
-      "agent": "reconcile",
-      "message": "new since last run: DIA, QQQ"
-    }
-  ],
-  "briefing": "Research is off. Add ANTHROPIC_API_KEY to your .env file to get a written briefing here.",
+  "findings": [],
+  "briefing": "",
   "recent_trades": [],
   "errors": [
-    "stale prices, newest bar is old: EA (19d)",
-    "price frozen for 5 bars, feed may be stuck: EA",
-    "UNPROTECTED: no stop order behind DIA, QQQ. These positions have no exit working at the broker.",
-    "no record of which strategy opened DIA, managing it with the pullback exits",
-    "no record of which strategy opened QQQ, managing it with the pullback exits"
+    "broker unreachable: GET /v2/account failed to reach the broker: HTTPSConnectionPool(host='paper-api.alpaca.markets', port=443): Max retries exceeded with url: /v2/account (Caused by ProxyError('Unable to connect to proxy', OSError('Tunnel connection failed: 403 Forbidden')))"
   ],
   "strategy_by_symbol": {},
   "research": {

@@ -196,15 +196,34 @@ def _stop_coverage(open_orders):
     orders. Counting sell orders instead of reading their type is how an
     unprotected position gets reported as safe.
     """
+    # An allowlist, not a denylist. Listing the dead statuses meant any state
+    # nobody had thought of, "replaced" among them, counted as live protection.
+    # The empty string stays on the list on purpose: these orders come from the
+    # broker's open-orders endpoint, which has already filtered to working
+    # orders, so a record with no status field is one the broker called open.
+    WORKING = ("new", "accepted", "held", "partially_filled", "pending_new",
+               "accepted_for_bidding", "calculated", "")
+
     stop_qty: Dict[str, int] = {}
     sells: Dict[str, int] = {}
+    seen: set = set()
+
     for o in _flatten_orders(open_orders):
         sym = o.get("symbol")
         if not sym or not str(o.get("side", "")).startswith("sell"):
             continue
-        if str(o.get("status", "")).lower() in ("canceled", "cancelled", "filled",
-                                                "expired", "rejected"):
+        if str(o.get("status") or "").lower() not in WORKING:
             continue
+
+        # A bracket leg can arrive both nested under its parent and again as a
+        # top-level order, and a replaced stop can arrive beside the one that
+        # replaced it. Adding both makes half a stop look like a whole one.
+        oid = o.get("id")
+        if oid is not None:
+            if oid in seen:
+                continue
+            seen.add(oid)
+
         sells[sym] = sells.get(sym, 0) + 1
         if o.get("stop_price") in (None, ""):
             continue
@@ -212,6 +231,12 @@ def _stop_coverage(open_orders):
             qty = abs(int(float(o.get("qty") or 0)))
         except (TypeError, ValueError):
             qty = 0
+        if qty < 1:
+            # A stop whose size cannot be read is not evidence of coverage.
+            # Recording it as zero used to put the symbol in the dictionary,
+            # which made "is there a stop?" answer yes while "how many shares
+            # does it cover?" answered none, and the two checks disagreed.
+            continue
         stop_qty[sym] = stop_qty.get(sym, 0) + qty
     return stop_qty, sells
 
@@ -228,9 +253,12 @@ def unprotected(positions: List[dict], open_orders) -> Dict[str, int]:
         if not sym:
             continue
         try:
-            owned = abs(int(float(p.get("shares") or 0)))
+            owned = int(float(p.get("shares") or 0))
         except (TypeError, ValueError):
             continue
+        # Long only. A negative holding is not something this agent created and
+        # not something it can cover: the repair path submits a SELL stop, which
+        # against a short would double the position rather than protect it.
         if owned < 1:
             continue
         gap = owned - stop_qty.get(sym, 0)
@@ -292,15 +320,28 @@ def check_broker(account: dict, positions: List[dict], open_orders: List[dict],
     # A stop that covers part of the position is the failure a count of orders
     # cannot see. A partly filled entry, or a stop cancelled and replaced at
     # the wrong size, leaves shares exposed behind an order that looks present.
-    short = []
+    short, over = [], []
     for sym, covered in stop_qty.items():
         owned = shares_held.get(sym)
-        if owned and covered and covered < owned:
+        if not owned or not covered:
+            continue
+        if covered < owned:
             short.append(f"{sym} ({covered} of {owned} sh)")
+        elif covered > owned:
+            over.append(f"{sym} ({covered} sh of stops on {owned} sh)")
     if short:
         out.append(Finding(CRITICAL, "reconcile",
                            f"PARTLY UNPROTECTED: the stop covers fewer shares "
                            f"than are held: {', '.join(short)}"))
+    if over:
+        # The dangerous direction nobody expects. Stops for more shares than
+        # you own do not fail safe: the first one sells the position and the
+        # second one opens a short, in a system that has no rules for shorts
+        # and no stop on one.
+        out.append(Finding(CRITICAL, "reconcile",
+                           f"OVER-PROTECTED: more stop shares are working than "
+                           f"are held, so one filling leaves a naked short: "
+                           f"{', '.join(over)}"))
 
     orphan = sorted(s for s in sells if s not in held)
     if orphan:

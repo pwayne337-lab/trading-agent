@@ -59,8 +59,18 @@ def _adjustment_drift(old: pd.DataFrame, fresh: pd.DataFrame):
         return 0.0, 0
     a = old.loc[shared, "close"].astype(float)
     b = fresh.loc[shared, "close"].astype(float)
+
+    # Only bars where both sides have a real price can be compared. Series.max()
+    # skips NaN, so an overlap that is entirely NaN used to return nan, and
+    # nan > tolerance is False, so the two halves were joined anyway and the
+    # NaN rows overwrote good cached bars on the way through.
+    usable = a.notna() & b.notna()
+    n = int(usable.sum())
+    if n == 0:
+        return float("inf"), 0
+    a, b = a[usable], b[usable]
     denom = b.abs().clip(lower=1e-9)
-    return float(((a - b).abs() / denom).max()), int(len(shared))
+    return float(((a - b).abs() / denom).max()), n
 
 
 def _normalize(df: pd.DataFrame) -> pd.DataFrame:
@@ -178,6 +188,7 @@ def download_many(symbols: List[str], start: str, end: Optional[str] = None,
                 one = raw.xs(sym, axis=1, level=1).dropna(how="all")
             except (KeyError, IndexError):
                 continue
+            one = one.dropna(subset=[c for c in ("Close", "close") if c in one.columns])
             if len(one) == 0:
                 continue
             try:
@@ -232,7 +243,7 @@ def load_bars(symbol: str, start: str = "2015-01-01", end: Optional[str] = None,
         # that an error. The moving averages would simply be wrong, the trend
         # filter would read a crash, and the agent would act on it. So the two
         # halves are compared where they overlap before they are joined.
-        old = _read_cache(path)
+        old = _read_cache(path) if use_cache else None
         if old is not None and len(old):
             drift, shared = _adjustment_drift(old, fresh)
             if shared == 0:
@@ -248,8 +259,13 @@ def load_bars(symbol: str, start: str = "2015-01-01", end: Optional[str] = None,
                 # whole history so every bar comes from one adjustment basis.
                 print(f"  [{symbol}] rebuilding cache: {reason}")
                 floor = str(old.index.min().date())
-                fresh = download_bars(symbol,
-                                      start=min(floor, start or floor), end=end)
+                begin = min(floor, start) if start else floor
+                # No end date on a rebuild. The cache is about to be replaced
+                # wholesale, so asking for a window that stops short of what is
+                # already on disk deletes the rest of the history, and a
+                # backtest run tomorrow silently covers less ground than the
+                # same command covered today.
+                fresh = download_bars(symbol, start=begin, end=None)
             else:
                 fresh = pd.concat([old, fresh])
                 fresh = fresh[~fresh.index.duplicated(keep="last")].sort_index()

@@ -33,7 +33,7 @@ from tbot.broker import (AlpacaBroker, BrokerError, committed_symbols,
 from tbot.config import DEFAULT_WATCHLIST, AgentConfig
 from tbot.dashboard import write_dashboard
 from tbot.research import Researcher, screen
-from tbot.risk import correlation_block, size_position
+from tbot.risk import DrawdownMonitor, correlation_block, size_position
 from tbot import ranking
 from tbot import watch
 from tbot.strategy import exit_decision, latest_signal, prepare, trend_state
@@ -151,7 +151,39 @@ def cmd_scan(args):
         print(f"\nWARNING: newest bar is {stale.days} days old. Run with --refresh.")
 
 
+# The in-progress record, so a crash can still publish what it knows.
+_LIVE_STATE = {}
+
+
 def cmd_run(args):
+    """The daily job, wrapped so that a crash still leaves a record.
+
+    Without this an unhandled exception, from a data source changing its
+    schema, a symbol with a missing column, a typo in the config, ends the run
+    in a traceback before anything is saved. state/agent_state.json still holds
+    yesterday's snapshot and the dashboard renders it as today's, so a broken
+    run is indistinguishable from a quiet one for three days, which is how long
+    the watchdog takes to notice the schedule stopped producing.
+    """
+    try:
+        return _cmd_run(args)
+    except BaseException as exc:
+        st = _LIVE_STATE
+        if st:
+            st.setdefault("errors", []).append(
+                f"the run failed partway through: {type(exc).__name__}: {exc}")
+            st["healthy"] = False
+            try:
+                state.save_state(st)
+                write_dashboard()
+            except Exception:
+                pass   # already failing; do not fail differently
+        print(f"\nRUN FAILED: {type(exc).__name__}: {exc}")
+        print("The record and the dashboard were written so the failure is visible.")
+        raise
+
+
+def _cmd_run(args):
     """The daily job: rules find setups, research screens them, orders go in,
     everything is recorded, the dashboard is rebuilt."""
     load_dotenv()
@@ -162,7 +194,19 @@ def cmd_run(args):
 
     broker = AlpacaBroker(dry_run=not args.submit)
     st = state.blank_state()
+    _LIVE_STATE.clear()
+    _LIVE_STATE.update(st)
+    st = _LIVE_STATE
     st["mode"] = "live" if broker.is_live else "paper"
+
+    # Carry forward what the previous run knew before anything can return
+    # early. save_state replaces the file wholesale, so without this a run that
+    # stops at the market-clock guard writes a blank map, and the next run has
+    # no record of which strategy opened which position. A mean reversion trade
+    # would then be managed by the trend exit and closed the day after it was
+    # opened, at a loss, for no reason anybody could see.
+    _prev = state.load_state()
+    st["strategy_by_symbol"] = dict((_prev or {}).get("strategy_by_symbol") or {})
 
     print(describe_safety(broker, cfg))
     if broker.is_live and not (cfg.allow_live_trading and args.i_understand_the_risk):
@@ -208,8 +252,20 @@ def cmd_run(args):
     try:
         orders_open = broker.open_orders()
     except BrokerError as exc:
-        orders_open = []
+        # An empty list would mean "there are none". This means "I do not know",
+        # and the two are not interchangeable. Treating unknown as none makes
+        # every held position look unprotected, so the repair path stacks a
+        # second stop behind stops that already exist, and one of them filling
+        # leaves a naked short. It also makes pending buys stop counting as
+        # commitments, so the same trade goes in twice.
+        print(f"Cannot read working orders: {exc}")
+        print("Refusing to act on an unknown order book.")
         st["errors"].append(f"could not read working orders: {exc}")
+        st["account"] = acct
+        st["positions"] = positions
+        state.save_state(st)
+        write_dashboard()
+        return
 
     held, working = committed_symbols(positions, orders_open)
     pending_only = sorted(working - held)
@@ -229,7 +285,9 @@ def cmd_run(args):
 
     if acct.get("trading_blocked"):
         st["errors"].append("trading blocked on this account")
+        st["account"] = acct
         state.save_state(st)
+        write_dashboard()
         print("Trading is blocked on this account. Exiting.")
         return
 
@@ -242,8 +300,27 @@ def cmd_run(args):
     bars = datamod.load_universe(cfg.watchlist, start=args.start, refresh=True)
 
     # --- the watchers, before any decision is made on this data -------------
-    previous = state.load_state()
+    previous = _prev
     prior_equity = state.load_equity_history()
+
+    # The drawdown circuit breaker. It existed in config, in risk.py and in the
+    # backtest, and was the one risk control the live run never consulted, so a
+    # 30% drawdown would have kept opening full-size positions all the way down.
+    dd = DrawdownMonitor(cfg.risk.max_drawdown_halt, cfg.risk.resume_below,
+                         cfg.risk.halt_cooldown_days)
+    for row in prior_equity:
+        try:
+            dd.update(float(row["equity"]))
+        except (KeyError, TypeError, ValueError):
+            continue
+    halted = dd.update(equity)
+    if halted:
+        st["errors"].append(
+            f"drawdown halt: equity is {(1 - equity / dd.peak) * 100:.1f}% below "
+            f"its high of ${dd.peak:,.2f}. No new positions until it recovers "
+            f"to within {cfg.risk.resume_below * 100:.0f}%.")
+        print(f"DRAWDOWN HALT: {(1 - equity / dd.peak) * 100:.1f}% below the "
+              f"high water mark. Managing existing positions only.\n")
 
     def look(orders):
         found = watch.run_all(bars, cfg.watchlist, acct, positions, orders,
@@ -288,10 +365,18 @@ def cmd_run(args):
         try:
             fill = broker.submit_stop(sym, shares, level,
                                       allow_live=cfg.allow_live_trading,
-                                      acknowledged=args.i_understand_the_risk)
+                                      acknowledged=args.i_understand_the_risk,
+                                      last_price=close)
         except BrokerError as exc:
             print(f"  {sym}: COULD NOT PROTECT, {exc}")
             st["errors"].append(f"could not place a stop on {sym}: {exc}")
+            continue
+        if not fill.submitted:
+            # A dry run sends nothing. Printing PROTECTED and writing it into
+            # the record would be a false entry in the one log you most need to
+            # be able to trust.
+            print(f"  {sym}: would protect {shares} sh at ${level:,.2f} "
+                  f"({fill.status})")
             continue
         print(f"  {sym}: PROTECTED, stop on {shares} sh at ${level:,.2f} "
               f"({fill.status})")
@@ -313,6 +398,10 @@ def cmd_run(args):
             findings = look(orders_open)
             held, working = committed_symbols(positions, orders_open)
             held |= working
+            # These are what the position limits are judged against, so they
+            # have to move with it. Refreshing `held` alone let a commitment
+            # accepted between the two reads slip past the max-positions cap.
+            open_count = len(held)
 
     st["findings"] = [f.to_dict() for f in findings]
     criticals = [f for f in findings if f.severity == watch.CRITICAL]
@@ -330,8 +419,9 @@ def cmd_run(args):
     # Which strategy opened each position, carried forward from the last run.
     # Anything unknown is managed by the pullback exits, which is the oldest
     # and most conservative set, and is noted rather than assumed silently.
-    strat_map = dict((previous or {}).get("strategy_by_symbol") or {})
+    strat_map = dict(st.get("strategy_by_symbol") or {})
 
+    closed_today = set()
     entry_dates = broker.entry_dates() if positions else {}
     for p in positions:
         sym = p["symbol"]
@@ -373,7 +463,11 @@ def cmd_run(args):
                             "status": fill.status,
                             "unrealized_pl": p.get("unrealized_pl")})
         if fill.submitted:
-            held.discard(sym)
+            # Deliberately NOT removed from `held`. The exits and the entries
+            # read the same bar, so the same close that closed a mean reversion
+            # trade can be a breakout signal, and the run would send a market
+            # sell and a market buy for one symbol into the same open.
+            closed_today.add(sym)
             strat_map.pop(sym, None)
             gross -= p.get("market_value", 0)
             open_count = max(0, open_count - 1)
@@ -396,7 +490,7 @@ def cmd_run(args):
 
     candidates = []
     for sym, df in sorted(bars.items()):
-        if sym in held or sym in unfit:
+        if sym in held or sym in unfit or sym in closed_today:
             continue
         sig = latest_signal(sym, df, cfg.strategy)
         if sig is None:
@@ -419,7 +513,7 @@ def cmd_run(args):
 
         order = size_position(equity, sig.reference_close, sig.stop, cfg.risk,
                               cfg.strategy, open_positions=open_count,
-                              gross_exposure=gross)
+                              gross_exposure=gross, halted=halted)
         if not order.ok:
             print(f"  {sym}: skipped, {order.rejected_reason}")
             st["skipped"].append({"symbol": sym, "reason": order.rejected_reason})

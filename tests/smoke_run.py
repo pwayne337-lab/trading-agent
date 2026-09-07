@@ -63,12 +63,17 @@ class FakeBroker:
     def clock(self):
         return {"is_open": False}
 
-    def submit_stop(self, symbol, shares, stop, allow_live=False, acknowledged=False):
+    def submit_stop(self, symbol, shares, stop, allow_live=False,
+                    acknowledged=False, last_price=None):
         if self.dry_run:
             return Fill(symbol, shares, "", "dry-run", False, f"would protect {symbol}")
+        # Mirror the real adapter: a stop at or above the market is not a stop.
+        if last_price is not None and stop >= last_price:
+            return Fill(symbol, 0, "", "rejected", False, "stop is not below the market")
         self.protected.append({"symbol": symbol, "shares": shares, "stop": stop})
         self._orders.append({"symbol": symbol, "side": "sell", "id": "stop-" + symbol,
-                             "qty": str(shares), "stop_price": str(stop)})
+                             "qty": str(shares), "stop_price": str(stop),
+                             "status": "new"})
         return Fill(symbol, shares, "id", "accepted", True)
 
     def entry_dates(self):
@@ -307,8 +312,10 @@ check("a stop was actually placed, not merely noted",
       [p["symbol"] for p in b.protected] == ["UP"], str(b.protected))
 check("the stop covers every share held",
       b.protected and b.protected[0]["shares"] == 10, str(b.protected))
+_last_close = float(build_bars()["UP"]["close"].iloc[-1])
 check("the stop sits below the market, so it cannot fire on submission",
-      b.protected and b.protected[0]["stop"] < 100.0 * 5, str(b.protected))
+      b.protected and b.protected[0]["stop"] < _last_close,
+      f"stop {b.protected[0]['stop'] if b.protected else '?'} vs close {_last_close:.2f}")
 check("the repair is recorded in state", len(st.get("protected") or []) == 1,
       str(st.get("protected")))
 # The finding must not survive the repair. The watchers judged a picture that
@@ -344,14 +351,54 @@ check("a partly covered position gets a stop for the remaining shares only",
 
 
 # ---------------------------------------------------------------------------
+print("\nE1c. Not knowing the order book is not the same as it being empty")
+# ---------------------------------------------------------------------------
+
+from tbot.broker import BrokerError as _BE
+
+
+class BlindBroker(FakeBroker):
+    """The broker answers about positions but not about working orders."""
+    def open_orders(self):
+        raise _BE("GET /v2/orders -> 500")
+
+
+_held = [{"symbol": "UP", "shares": 10, "avg_entry": 100.0,
+          "market_value": 1_000.0, "unrealized_pl": 0.0}]
+b, st = run(positions=_held, orders=[], broker=BlindBroker(list(_held), []))
+check("an unreadable order book stops the run rather than guessing",
+      b.submitted == [] and b.protected == [],
+      f"submitted {b.submitted}, protected {b.protected}")
+check("no second stop is stacked behind stops that may already exist",
+      b.protected == [], str(b.protected))
+check("and it says so in the record",
+      any("working orders" in e for e in st["errors"]), str(st["errors"]))
+check("the page is still rebuilt so the outage is visible",
+      bool(st.get("updated_at")))
+
+
+# ---------------------------------------------------------------------------
+print("\nE1d. A symbol sold today is not bought back today")
+# ---------------------------------------------------------------------------
+# The exits and the entries read the same bar, so one close can both end a
+# mean reversion trade and be a breakout signal. Acting on both sends a market
+# sell and a market buy for one symbol into the same open.
+
+_dn = [{"symbol": "DOWNTREND", "shares": 10, "avg_entry": 100.0,
+        "market_value": 700.0, "unrealized_pl": -300.0}]
+b, st = run(positions=_dn, orders=[])
+check("the position was sold", "DOWNTREND" in b.closed, str(b.closed))
+check("and was not re-bought in the same run",
+      "DOWNTREND" not in [o["symbol"] for o in b.submitted],
+      str([o["symbol"] for o in b.submitted]))
+
+
+# ---------------------------------------------------------------------------
 print("\nE2. One broker failure does not take the whole run down")
 # ---------------------------------------------------------------------------
 # A run that dies partway through is worse than a run that does nothing: state
 # is never saved, the dashboard still shows yesterday as current, and the
 # remaining positions go unmanaged with no error anywhere a person would see.
-
-from tbot.broker import BrokerError as _BE
-
 
 class RejectingBroker(FakeBroker):
     """The broker refuses every buy, the way it would on a halted symbol or

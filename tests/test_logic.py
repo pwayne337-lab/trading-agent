@@ -43,7 +43,8 @@ truncated = add_indicators(df.iloc[:300], AgentConfig().strategy)
 
 # Every indicator value on bar 299 must be identical whether or not bars 300+
 # exist. If it is not, the indicator is peeking into the future.
-cols = ["sma_fast", "sma_slow", "ema_pb", "atr", "swing_low", "adv"]
+cols = ["sma_fast", "sma_slow", "ema_pb", "atr", "swing_low", "adv",
+        "donchian_hi", "rsi_fast", "sma_exit"]
 same = all(
     np.isclose(full[c].iloc[299], truncated[c].iloc[299], equal_nan=True)
     for c in cols
@@ -697,6 +698,133 @@ datamod.CACHE_DIR = _cache_backup
 
 
 # ---------------------------------------------------------------------------
+print("\n7a-0. The safety switch and the exits that have to outlive the day")
+# ---------------------------------------------------------------------------
+from tbot.broker import AlpacaBroker as _AB, PAPER_URL as _PAPER
+
+# A bracket's time in force covers the whole group at Alpaca. With "day" the
+# stop comes down at the close of the session the entry filled in, so every
+# position spends its first night with no exit working anywhere.
+_probe = {}
+class _CaptureBroker(_AB):
+    def __init__(self): super().__init__(key="k", secret="s", dry_run=False)
+    def _request(self, method, path, **kw):
+        _probe.update(kw.get("json") or {}); return {"id": "x", "status": "accepted"}
+_CaptureBroker().submit_bracket("AAA", 10, 90.0, 120.0)
+check("the bracket outlives the session that opened it",
+      _probe.get("time_in_force") == "gtc", str(_probe.get("time_in_force")))
+check("the stop and the target go in with the entry",
+      _probe.get("order_class") == "bracket"
+      and "stop_loss" in _probe and "take_profit" in _probe, str(sorted(_probe)))
+
+# The live/paper switch decides whether three safety locks run at all, so an
+# unrecognised URL has to count as live. Calling anything it does not
+# recognise "paper" means a typo trades real money with the guards asleep.
+for _u, _want in ((_PAPER, False),
+                  ("http://paper-api.alpaca.markets", False),
+                  ("https://paper-api.alpaca.markets/v2", False),
+                  ("https://api.alpaca.markets", True),
+                  ("HTTPS://API.ALPACA.MARKETS", True),
+                  ("http://api.alpaca.markets", True),
+                  ("https://some-proxy.example.com", True)):
+    check(f"{_u[:34]:<34} reads as {'LIVE' if _want else 'paper'}",
+          _AB(key="k", secret="s", base_url=_u).is_live is _want)
+
+# A sell stop at or above the market is an instruction to dump the position.
+class _StopBroker(_AB):
+    def __init__(self): super().__init__(key="k", secret="s", dry_run=False)
+    def _request(self, method, path, **kw): return {"id": "x", "status": "accepted"}
+check("a stop above the market is refused, not submitted",
+      _StopBroker().submit_stop("AAA", 10, 110.0, last_price=100.0).submitted is False)
+check("a stop below the market is accepted",
+      _StopBroker().submit_stop("AAA", 10, 90.0, last_price=100.0).submitted is True)
+
+# Fills arrive a page at a time. Without paging, a position opened more than
+# one page of fills ago has no buy in the window, and the time stop, which
+# exists for exactly the oldest positions, quietly stops applying to them.
+class _PagedBroker(_AB):
+    def __init__(self):
+        super().__init__(key="k", secret="s", dry_run=False); self.pages = 0
+    def _request(self, method, path, **kw):
+        self.pages += 1
+        if self.pages == 1:
+            return [{"id": str(i), "symbol": "ZZZ", "side": "sell", "qty": "1",
+                     "price": "10", "transaction_time": "2026-02-01T00:00:00Z"}
+                    for i in range(100)]
+        if self.pages == 2:
+            return [{"id": "old", "symbol": "AAA", "side": "buy", "qty": "10",
+                     "price": "100", "transaction_time": "2020-01-02T00:00:00Z"}]
+        return []
+_pb = _PagedBroker()
+check("fills are read past the first page",
+      len(_pb.activities()) == 101, f"{len(_pb.activities())} fills")
+check("so an old position still has an entry date for the time stop",
+      _PagedBroker().entry_dates().get("AAA") == "2020-01-02",
+      str(_PagedBroker().entry_dates()))
+
+# Scaling out of half a position must not exempt the rest from the time stop.
+class _PartialBroker(_AB):
+    def __init__(self): super().__init__(key="k", secret="s", dry_run=False)
+    def _request(self, method, path, **kw):
+        return [{"id": "1", "symbol": "AAA", "side": "buy", "qty": "100",
+                 "price": "10", "transaction_time": "2026-01-05T00:00:00Z"},
+                {"id": "2", "symbol": "AAA", "side": "sell", "qty": "1",
+                 "price": "11", "transaction_time": "2026-02-05T00:00:00Z"}]
+check("selling 1 of 100 shares does not reset the holding clock",
+      _PartialBroker().entry_dates().get("AAA") == "2026-01-05",
+      str(_PartialBroker().entry_dates()))
+
+# A malformed fill must be skipped, not guessed at. A missing side used to
+# consume a real lot and invent a closed trade; a missing price printed as a
+# total loss.
+class _JunkBroker(_AB):
+    def __init__(self): super().__init__(key="k", secret="s", dry_run=False)
+    def _request(self, method, path, **kw):
+        return [{"id": "1", "symbol": "AAA", "side": "buy", "qty": "10",
+                 "price": "100", "transaction_time": "2026-01-01T00:00:00Z"},
+                {"id": "2", "symbol": "AAA", "qty": "10",
+                 "price": "105", "transaction_time": "2026-01-02T00:00:00Z"},
+                {"id": "3", "symbol": "AAA", "side": "sell", "qty": "10",
+                 "transaction_time": "2026-01-03T00:00:00Z"}]
+check("a fill with no side does not fabricate a closed trade",
+      _JunkBroker().realized_trades() == [], str(_JunkBroker().realized_trades()))
+
+
+# ---------------------------------------------------------------------------
+print("\n7a-0b. Reading the order book correctly, in both directions")
+# ---------------------------------------------------------------------------
+from tbot import watch as _w
+
+_pos10 = [{"symbol": "AAA", "shares": 10}]
+_acct0 = {"equity": 100_000.0, "buying_power": 1.0, "trading_blocked": False}
+
+check("a stop whose size cannot be read is not counted as cover",
+      _w.unprotected(_pos10, [{"symbol": "AAA", "side": "sell", "id": "1",
+                               "qty": None, "stop_price": "90",
+                               "status": "new"}]) == {"AAA": 10})
+check("a replaced stop is not added to the one that replaced it",
+      _w.unprotected(_pos10, [
+          {"symbol": "AAA", "side": "sell", "id": "1", "qty": "10",
+           "stop_price": "90", "status": "replaced"},
+          {"symbol": "AAA", "side": "sell", "id": "2", "qty": "5",
+           "stop_price": "90", "status": "new"}]) == {"AAA": 5})
+check("the same order seen twice is only counted once",
+      _w.unprotected(_pos10, [
+          {"symbol": "AAA", "side": "sell", "id": "1", "qty": "5",
+           "stop_price": "90", "status": "new"},
+          {"symbol": "AAA", "side": "sell", "id": "1", "qty": "5",
+           "stop_price": "90", "status": "new"}]) == {"AAA": 5})
+check("a short position is never handed to the long-only repair path",
+      _w.unprotected([{"symbol": "AAA", "shares": -10}], []) == {})
+check("more stop shares than are held is itself a critical finding",
+      any("OVER-PROTECTED" in f.message and f.severity == _w.CRITICAL
+          for f in _w.check_broker(_acct0, _pos10,
+                                   [{"symbol": "AAA", "side": "sell", "id": "1",
+                                     "qty": "100", "stop_price": "90",
+                                     "status": "new"}])))
+
+
+# ---------------------------------------------------------------------------
 print("\n7a-iii. The dashboard stylesheet cannot reference a colour that does not exist")
 # ---------------------------------------------------------------------------
 # var(--whatever) with no matching definition silently falls back to inherit.
@@ -825,8 +953,12 @@ except _BErr as exc:
 check("when the stop cannot be restored the message says so, loudly",
       "no stop order behind" in _raised2, _raised2)
 
-check("cancel_orders_for reports what it cancelled, not just how many",
-      isinstance(_FlakyBroker().cancel_orders_for("AAA"), list))
+_cancelled = _FlakyBroker().cancel_orders_for("AAA")
+check("cancel_orders_for returns the orders themselves, not just a count",
+      len(_cancelled) == 2 and {o["id"] for o in _cancelled} == {"stop1", "tp1"},
+      str(_cancelled))
+check("and the cancelled stop still carries the price needed to restore it",
+      any(o.get("stop_price") for o in _cancelled), str(_cancelled))
 
 # A network failure must arrive as the error type every caller already handles.
 # Raw urllib exceptions escape every try/except in the agent and end the daily
@@ -924,9 +1056,14 @@ _stop = float(_rk_df["close"].iloc[_last]) * 0.95
 
 check("'none' scores everything the same, so order is preserved",
       ranking.score("none", _rk_df, _last, _stop) == 0.0)
+# Comparing a function against itself on a copy is true for anything
+# deterministic, including a scorer that openly reads the future. The real
+# test is that changing a FUTURE bar cannot change today's score.
+_rk_future = _rk_df.copy()
+_rk_future.iloc[_last, _rk_future.columns.get_loc("close")] *= 1.5
 check("momentum reads a trailing return, not today's bar",
       ranking.score("momentum", _rk_df, _last, _stop) ==
-      ranking.score("momentum", _rk_df.copy(), _last, _stop))
+      ranking.score("momentum", _rk_future, _last, _stop))
 
 # No lookahead: a score computed at bar i must not change when later bars are
 # removed. If it does, the ranking is reading the future.

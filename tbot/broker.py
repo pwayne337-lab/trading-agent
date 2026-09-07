@@ -53,7 +53,21 @@ class AlpacaBroker:
 
     @property
     def is_live(self) -> bool:
-        return self.base_url.startswith(LIVE_URL)
+        """Anything not recognisably the paper host counts as live.
+
+        This is the switch all three safety locks hang off, so it has to fail
+        in the safe direction. Matching the live URL and calling everything
+        else paper means a typo, a stray http://, or a capitalised host is
+        silently treated as fake money and the guards never run. Allowing only
+        the paper host means the worst case is a refusal, not a real order.
+        """
+        host = self.base_url.lower()
+        for scheme in ("https://", "http://"):
+            if host.startswith(scheme):
+                host = host[len(scheme):]
+                break
+        host = host.split("/")[0]
+        return host != "paper-api.alpaca.markets"
 
     @property
     def configured(self) -> bool:
@@ -125,10 +139,30 @@ class AlpacaBroker:
     def clock(self) -> dict:
         return self._request("GET", "/v2/clock")
 
-    def activities(self, page_size: int = 100) -> List[dict]:
-        """Raw fill records, newest first."""
-        return self._request("GET", "/v2/account/activities",
-                             params={"activity_types": "FILL", "page_size": page_size})
+    def activities(self, page_size: int = 100, max_pages: int = 20) -> List[dict]:
+        """Raw fill records, newest first, across pages.
+
+        One page holds 100 fills. A position opened more than 100 fills ago has
+        no buy inside that window, so entry_dates loses it and the time stop
+        silently stops applying to the oldest holdings, which are the only ones
+        a time stop was ever going to act on.
+        """
+        out: List[dict] = []
+        token = None
+        for _ in range(max_pages):
+            params = {"activity_types": "FILL", "page_size": page_size}
+            if token:
+                params["page_token"] = token
+            page = self._request("GET", "/v2/account/activities", params=params)
+            if not isinstance(page, list) or not page:
+                break
+            out.extend(page)
+            if len(page) < page_size:
+                break
+            token = page[-1].get("id")
+            if not token:
+                break
+        return out
 
     def realized_trades(self, limit: int = 20) -> List[dict]:
         """Closed round trips with realized P&L, newest first.
@@ -143,13 +177,25 @@ class AlpacaBroker:
 
         for f in fills:
             sym = f.get("symbol")
-            side = f.get("side", "")
+            side = str(f.get("side") or "")
+            # A missing side used to fall through to the sell branch and
+            # consume a real lot, inventing a closed trade that never happened.
+            # A missing price became 0.00 and printed as a total loss. Neither
+            # is worth guessing at: skip the record and stay honest.
+            if not side.startswith(("buy", "sell")):
+                continue
+            if f.get("price") in (None, ""):
+                continue
+            # This agent is long only. Short-side activity cannot be matched by
+            # a long FIFO queue, and trying poisons every trade after it.
+            if side in ("sell_short", "buy_to_cover"):
+                continue
             try:
                 qty = abs(int(float(f.get("qty", 0))))
-                price = float(f.get("price", 0))
+                price = float(f.get("price"))
             except (TypeError, ValueError):
                 continue
-            if not sym or qty <= 0:
+            if not sym or qty <= 0 or price <= 0:
                 continue
 
             if side.startswith("buy"):
@@ -215,7 +261,13 @@ class AlpacaBroker:
             "qty": str(shares),
             "side": "buy",
             "type": "market",
-            "time_in_force": "day",
+            # GTC, not day. At Alpaca the time in force applies to the whole
+            # bracket, so a "day" bracket takes its stop and target down at the
+            # close of the session the entry filled in. The position is then
+            # held overnight with no exit working anywhere, which is the exact
+            # state this system exists to never be in, and it would happen to
+            # every single trade on its first night.
+            "time_in_force": "gtc",
             "order_class": "bracket",
             "take_profit": {"limit_price": round(target, 2)},
             "stop_loss": {"stop_price": round(stop, 2)},
@@ -229,7 +281,8 @@ class AlpacaBroker:
         return Fill(symbol, shares, order.get("id", ""), order.get("status", "?"), True)
 
     def submit_stop(self, symbol: str, shares: int, stop: float,
-                    allow_live: bool = False, acknowledged: bool = False) -> Fill:
+                    allow_live: bool = False, acknowledged: bool = False,
+                    last_price: Optional[float] = None) -> Fill:
         """Put a plain protective stop behind a position that has none.
 
         Good til cancelled and on its own, not as a bracket leg, because there
@@ -250,6 +303,12 @@ class AlpacaBroker:
             return Fill(symbol, 0, "", "rejected", False, "share count below 1")
         if stop <= 0:
             return Fill(symbol, 0, "", "rejected", False, "stop price is not positive")
+        if last_price is not None and stop >= last_price:
+            # A sell stop at or above the market is not protection, it is an
+            # instruction to dump the position immediately.
+            return Fill(symbol, 0, "", "rejected", False,
+                        f"stop {stop:.2f} is not below the last price "
+                        f"{last_price:.2f}")
 
         if self.dry_run:
             return Fill(symbol, shares, "", "dry-run", False,
@@ -332,15 +391,29 @@ class AlpacaBroker:
             fills = sorted(self.activities(), key=lambda a: a.get("transaction_time", ""))
         except BrokerError:
             return out
+        open_qty: Dict[str, int] = {}
         for f in fills:
             sym, side = f.get("symbol"), f.get("side", "")
             when = (f.get("transaction_time") or "")[:10]
             if not sym or not when:
                 continue
+            try:
+                qty = abs(int(float(f.get("qty") or 0)))
+            except (TypeError, ValueError):
+                qty = 0
             if side.startswith("buy"):
-                out[sym] = when
+                if open_qty.get(sym, 0) <= 0:
+                    out[sym] = when          # a fresh position starts the clock
+                open_qty[sym] = open_qty.get(sym, 0) + qty
             elif side.startswith("sell"):
-                out.pop(sym, None)     # position closed, clock resets
+                # Only a sale that closes the whole position resets the clock.
+                # Scaling out of half a position used to wipe the entry date,
+                # which quietly exempted the remaining shares from the time
+                # stop for as long as they were held.
+                open_qty[sym] = open_qty.get(sym, 0) - qty
+                if open_qty.get(sym, 0) <= 0:
+                    open_qty[sym] = 0
+                    out.pop(sym, None)
         return out
 
     def close_position(self, symbol: str, allow_live: bool = False,
