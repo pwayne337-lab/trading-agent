@@ -1,7 +1,7 @@
 {
-  "updated_at": "2026-09-07T19:06:40+00:00",
+  "updated_at": "2026-09-07T19:12:17+00:00",
   "mode": "paper",
-  "healthy": false,
+  "healthy": true,
   "account": {
     "equity": 99908.75,
     "cash": 50896.43,
@@ -27,19 +27,145 @@
       "unrealized_pl": 3.74
     }
   ],
-  "signals": [],
-  "vetoes": [],
-  "orders": [],
-  "exits": [],
-  "protected": [],
-  "skipped": [],
-  "findings": [],
-  "briefing": "",
-  "recent_trades": [],
-  "errors": [
-    "the run failed partway through: TypeError: Iterator operand or requested dtype holds references, but the NPY_ITER_REFS_OK flag was not enabled"
+  "signals": [
+    {
+      "symbol": "CL",
+      "entry": 88.77,
+      "stop": 84.3261,
+      "target": 97.6578,
+      "shares": 224,
+      "strategy": "reversion",
+      "why": "RSI(2) at 8, below the 10-day average; stop 2.50x ATR below entry"
+    },
+    {
+      "symbol": "JCI",
+      "entry": 144.94,
+      "stop": 137.1709,
+      "target": 160.4782,
+      "shares": 128,
+      "strategy": "pullback",
+      "why": "pullback to the 20 EMA, reclaimed; stop 2.10x ATR below entry"
+    },
+    {
+      "symbol": "KLAC",
+      "entry": 185.6,
+      "stop": 166.1186,
+      "target": 224.5628,
+      "shares": 51,
+      "strategy": "pullback",
+      "why": "pullback to the 20 EMA, reclaimed; stop 2.09x ATR below entry"
+    }
   ],
-  "strategy_by_symbol": {},
+  "vetoes": [],
+  "orders": [
+    {
+      "symbol": "CL",
+      "shares": 224,
+      "stop": 84.3261,
+      "target": 97.6578,
+      "dollars_at_risk": 995.43,
+      "order_id": "2b35af7f-017f-4aee-a221-15230a743903",
+      "strategy": "reversion"
+    },
+    {
+      "symbol": "JCI",
+      "shares": 128,
+      "stop": 137.1709,
+      "target": 160.4782,
+      "dollars_at_risk": 994.45,
+      "order_id": "ed056fca-932d-48c3-a5c9-2159a2637814",
+      "strategy": "pullback"
+    },
+    {
+      "symbol": "KLAC",
+      "shares": 51,
+      "stop": 166.1186,
+      "target": 224.5628,
+      "dollars_at_risk": 993.55,
+      "order_id": "afa4ad34-7d51-458b-94f6-133bf19f3e9b",
+      "strategy": "pullback"
+    }
+  ],
+  "exits": [],
+  "protected": [
+    {
+      "symbol": "DIA",
+      "shares": 46,
+      "stop": 524.84,
+      "status": "accepted"
+    },
+    {
+      "symbol": "QQQ",
+      "shares": 34,
+      "stop": 700.06,
+      "status": "accepted"
+    }
+  ],
+  "skipped": [
+    {
+      "symbol": "AMD",
+      "reason": "moves almost identically to QQQ (0.81 correlation)"
+    },
+    {
+      "symbol": "EEM",
+      "reason": "moves almost identically to QQQ (0.88 correlation)"
+    },
+    {
+      "symbol": "INTC",
+      "reason": "moves almost identically to QQQ (0.83 correlation)"
+    },
+    {
+      "symbol": "KRE",
+      "reason": "already holding 5 positions (max 5)"
+    },
+    {
+      "symbol": "LIN",
+      "reason": "already holding 5 positions (max 5)"
+    },
+    {
+      "symbol": "LLY",
+      "reason": "already holding 5 positions (max 5)"
+    },
+    {
+      "symbol": "MRVL",
+      "reason": "already holding 5 positions (max 5)"
+    },
+    {
+      "symbol": "PM",
+      "reason": "already holding 5 positions (max 5)"
+    },
+    {
+      "symbol": "PNC",
+      "reason": "already holding 5 positions (max 5)"
+    },
+    {
+      "symbol": "SBUX",
+      "reason": "already holding 5 positions (max 5)"
+    },
+    {
+      "symbol": "SMH",
+      "reason": "already holding 5 positions (max 5)"
+    },
+    {
+      "symbol": "WFC",
+      "reason": "already holding 5 positions (max 5)"
+    }
+  ],
+  "findings": [
+    {
+      "severity": "warning",
+      "agent": "watchdog",
+      "message": "last run reported 1 error(s): the run failed partway through: TypeError: Iterator operand or requested dtype holds references, but the NPY_ITER_REFS_OK flag was not enabled"
+    }
+  ],
+  "briefing": "Research is off. Add ANTHROPIC_API_KEY to your .env file to get a written briefing here.",
+  "recent_trades": [],
+  "errors": [],
+  "strategy_by_symbol": {
+    "CL": "reversion",
+    "JCI": "pullback",
+    "KLAC": "pullback"
+  },
   "research": {
     "llm_calls": 0,
     "llm_errors": 0,
