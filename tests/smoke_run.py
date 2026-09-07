@@ -578,6 +578,30 @@ check("a schedule that stopped firing is critical",
       any(x.severity == watch.CRITICAL and "schedule" in x.message
           for x in watch.check_run_health(_old, [])))
 
+# Every call above passes an EMPTY history, so the gap-detection branch below
+# never ran. It needs two rows to execute at all, which is why it survived
+# every test and then crashed the run on the third day of real history.
+_recent = {"updated_at": pd.Timestamp.utcnow().isoformat(), "positions": []}
+_two = [{"date": "2026-09-03", "equity": 100000.0},
+        {"date": "2026-09-04", "equity": 99812.49}]
+check("two days of history does not crash the watchdog",
+      isinstance(watch.check_run_health(_recent, _two), list),
+      "raised instead of returning findings")
+check("consecutive days are not reported as a gap",
+      not [x for x in watch.check_run_health(_recent, _two) if "gap" in x.message],
+      str(watch.check_run_health(_recent, _two)))
+
+_gappy = [{"date": "2026-06-01", "equity": 100000.0},
+          {"date": "2026-07-15", "equity": 99000.0},
+          {"date": "2026-07-16", "equity": 99500.0}]
+check("a real hole in the record IS reported",
+      any("gap" in x.message for x in watch.check_run_health(_recent, _gappy)),
+      str(watch.check_run_health(_recent, _gappy)))
+check("the watchdog survives a long history",
+      isinstance(watch.check_run_health(
+          _recent, [{"date": d.strftime("%Y-%m-%d"), "equity": 100000.0}
+                    for d in pd.bdate_range("2025-01-01", periods=400)]), list))
+
 print("\n" + "=" * 60)
 if FAILURES:
     print(f"{len(FAILURES)} SMOKE CHECK(S) FAILED:")

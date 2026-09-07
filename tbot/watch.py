@@ -407,7 +407,13 @@ def check_run_health(previous_state: Optional[dict], history: List[dict],
 
     if len(history) >= 2:
         dates = pd.to_datetime([h["date"] for h in history]).sort_values()
-        gaps = np.busday_count(dates[:-1].date, dates[1:].date)
+        # datetime64[D], not .date. DatetimeIndex.date hands back an
+        # object-dtype array of datetime.date, and np.busday_count refuses an
+        # object array outright. This branch needs two rows of history to run
+        # at all, and the only test for this function passed an empty list, so
+        # the crash sat here until the third day of live running.
+        days = dates.to_numpy(dtype="datetime64[D]")
+        gaps = np.busday_count(days[:-1], days[1:])
         big = int((gaps > max_gap_days).sum())
         if big:
             out.append(Finding(WARNING, "watchdog",
