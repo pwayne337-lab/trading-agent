@@ -113,6 +113,27 @@ def load_equity_history() -> list:
     return out
 
 
+def load_runs(limit: int = 20) -> list:
+    """The most recent audit-trail entries, oldest first.
+
+    Reading back what happened on previous runs is what lets a watcher tell one
+    bad day from a pattern of them.
+    """
+    if not RUNLOG_FILE.exists():
+        return []
+    out = []
+    try:
+        lines = RUNLOG_FILE.read_text().strip().splitlines()[-limit:]
+    except Exception:
+        return []
+    for line in lines:
+        try:
+            out.append(json.loads(line))
+        except Exception:
+            continue
+    return out
+
+
 def log_run(entry: dict) -> None:
     """Append-only audit trail. Never rewritten, so you can always reconstruct
     what the agent believed at the time it acted."""

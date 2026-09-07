@@ -385,7 +385,8 @@ def check_broker(account: dict, positions: List[dict], open_orders: List[dict],
 # ---------------------------------------------------------------------------
 
 def check_run_health(previous_state: Optional[dict], history: List[dict],
-                     max_gap_days: int = 3) -> List[Finding]:
+                     max_gap_days: int = 3,
+                     runs: Optional[List[dict]] = None) -> List[Finding]:
     """Has the agent actually been running?"""
     out: List[Finding] = []
 
@@ -401,9 +402,30 @@ def check_run_health(previous_state: Optional[dict], history: List[dict],
 
     prev_errors = previous_state.get("errors") or []
     if prev_errors:
-        out.append(Finding(WARNING, "watchdog",
-                           f"last run reported {len(prev_errors)} error(s): "
-                           f"{prev_errors[0]}"))
+        # How loud this should be depends on whether it is still happening.
+        # A single failure that a later run has already moved past is history:
+        # reporting it as a live warning puts a caution banner on a dashboard
+        # whose own run was clean, which trains you to ignore the banner. A run
+        # of failures is the opposite, and that is what deserves the noise.
+        streak = 0
+        for r in reversed(runs or []):
+            if r.get("healthy") is False:
+                streak += 1
+            elif r.get("healthy") is True:
+                break
+        first = str(prev_errors[0])
+        if len(first) > 120:
+            first = first[:120].rsplit(" ", 1)[0] + "..."
+        when = str(previous_state.get("updated_at") or "")[:10]
+        if streak >= 2:
+            out.append(Finding(WARNING, "watchdog",
+                               f"{streak} runs in a row have ended with errors. "
+                               f"Most recent: {first}"))
+        else:
+            out.append(Finding(INFO, "watchdog",
+                               f"the previous run ({when}) ended with "
+                               f"{len(prev_errors)} error(s), since resolved: "
+                               f"{first}"))
 
     if len(history) >= 2:
         dates = pd.to_datetime([h["date"] for h in history]).sort_values()
@@ -425,9 +447,9 @@ def check_run_health(previous_state: Optional[dict], history: List[dict],
 # ---------------------------------------------------------------------------
 
 def run_all(bars, expected, account, positions, open_orders,
-            previous_state, history) -> List[Finding]:
+            previous_state, history, runs=None) -> List[Finding]:
     findings: List[Finding] = []
-    findings += check_run_health(previous_state, history)
+    findings += check_run_health(previous_state, history, runs=runs)
     findings += check_data(
         bars, expected,
         held=[p.get("symbol") for p in (positions or []) if p.get("symbol")])

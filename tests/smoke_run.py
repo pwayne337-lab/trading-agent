@@ -573,6 +573,35 @@ check("an oversized position is flagged even though no rule created it",
                              [{"symbol": "AAA", "side": "sell", "id": "1",
                                "qty": "10", "stop_price": "90"}])))
 
+# A failure the next run has already moved past is history, not an alarm. A
+# caution banner on a dashboard whose own run was clean teaches you to ignore
+# banners, which is the one habit this whole system cannot afford.
+_failed_once = {"updated_at": "2026-09-07T04:48:47+00:00", "positions": [],
+                "errors": ["the run failed partway through: TypeError: Iterator "
+                           "operand or requested dtype holds references, but the "
+                           "NPY_ITER_REFS_OK flag was not enabled"]}
+_after_recovery = [{"healthy": False}, {"healthy": True}]
+_one = watch.check_run_health(_failed_once, [], runs=_after_recovery)
+check("a single failure a later run recovered from is not a warning",
+      not [x for x in _one if x.severity in (watch.CRITICAL, watch.WARNING)],
+      str([(x.severity, x.message[:50]) for x in _one]))
+check("but it is still on the record as history",
+      any(x.severity == watch.INFO and "previous run" in x.message for x in _one),
+      str(_one))
+check("and the message is cut at a word, not mid-token",
+      all(not x.message.rstrip(".").endswith("NPY_ITER_REFS_O") for x in _one))
+
+_still_failing = [{"healthy": True}, {"healthy": False}, {"healthy": False}]
+_streak = watch.check_run_health(_failed_once, [], runs=_still_failing)
+check("failures in a row ARE a warning",
+      any(x.severity == watch.WARNING and "in a row" in x.message for x in _streak),
+      str([(x.severity, x.message[:50]) for x in _streak]))
+check("and it says how many",
+      any("2 runs in a row" in x.message for x in _streak), str(_streak))
+
+check("with no run log at all it still reports the failure as history",
+      any(x.severity == watch.INFO for x in watch.check_run_health(_failed_once, [])))
+
 _old = {"updated_at": "2026-01-01T00:00:00+00:00", "positions": []}
 check("a schedule that stopped firing is critical",
       any(x.severity == watch.CRITICAL and "schedule" in x.message

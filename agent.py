@@ -302,6 +302,7 @@ def _cmd_run(args):
     # --- the watchers, before any decision is made on this data -------------
     previous = _prev
     prior_equity = state.load_equity_history()
+    prior_runs = state.load_runs()
 
     # The drawdown circuit breaker. It existed in config, in risk.py and in the
     # backtest, and was the one risk control the live run never consulted, so a
@@ -324,7 +325,7 @@ def _cmd_run(args):
 
     def look(orders):
         found = watch.run_all(bars, cfg.watchlist, acct, positions, orders,
-                              previous, prior_equity)
+                              previous, prior_equity, runs=prior_runs)
         if found:
             print(f"Checks: {watch.summarize(found)}")
             for f in found:
@@ -596,7 +597,9 @@ def _cmd_run(args):
     state.save_state(st)
     state.log_run({"mode": st["mode"], "equity": equity,
                    "orders": len(st["orders"]), "vetoes": len(st["vetoes"]),
-                   "submitted": bool(args.submit)})
+                   "submitted": bool(args.submit),
+                   "healthy": bool(st["healthy"]),
+                   "errors": len(st["errors"])})
     page = write_dashboard()
 
     if st["briefing"]:
