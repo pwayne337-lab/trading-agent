@@ -1,9 +1,32 @@
 {
-  "updated_at": "2026-09-07T04:48:47+00:00",
+  "updated_at": "2026-09-07T19:06:40+00:00",
   "mode": "paper",
   "healthy": false,
-  "account": {},
-  "positions": [],
+  "account": {
+    "equity": 99908.75,
+    "cash": 50896.43,
+    "buying_power": 340820.22,
+    "status": "ACTIVE",
+    "pattern_day_trader": null,
+    "trading_blocked": false,
+    "mode": "PAPER"
+  },
+  "positions": [
+    {
+      "symbol": "DIA",
+      "shares": 46,
+      "avg_entry": 536.144783,
+      "market_value": 24567.68,
+      "unrealized_pl": -94.980018
+    },
+    {
+      "symbol": "QQQ",
+      "shares": 34,
+      "avg_entry": 718.85,
+      "market_value": 24444.64,
+      "unrealized_pl": 3.74
+    }
+  ],
   "signals": [],
   "vetoes": [],
   "orders": [],
@@ -14,7 +37,7 @@
   "briefing": "",
   "recent_trades": [],
   "errors": [
-    "broker unreachable: GET /v2/account failed to reach the broker: HTTPSConnectionPool(host='paper-api.alpaca.markets', port=443): Max retries exceeded with url: /v2/account (Caused by ProxyError('Unable to connect to proxy', OSError('Tunnel connection failed: 403 Forbidden')))"
+    "the run failed partway through: TypeError: Iterator operand or requested dtype holds references, but the NPY_ITER_REFS_OK flag was not enabled"
   ],
   "strategy_by_symbol": {},
   "research": {
