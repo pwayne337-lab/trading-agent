@@ -1,91 +1,21 @@
 {
-  "updated_at": "2026-09-07T23:39:18+00:00",
+  "updated_at": "2026-09-08T15:55:19+00:00",
   "mode": "paper",
-  "healthy": true,
-  "account": {
-    "equity": 99908.75,
-    "cash": 50896.43,
-    "buying_power": 293125.77,
-    "status": "ACTIVE",
-    "pattern_day_trader": null,
-    "trading_blocked": false,
-    "mode": "PAPER"
-  },
-  "positions": [
-    {
-      "symbol": "DIA",
-      "shares": 46,
-      "avg_entry": 536.144783,
-      "market_value": 24567.68,
-      "unrealized_pl": -94.980018
-    },
-    {
-      "symbol": "QQQ",
-      "shares": 34,
-      "avg_entry": 718.85,
-      "market_value": 24444.64,
-      "unrealized_pl": 3.74
-    }
-  ],
+  "healthy": false,
+  "account": {},
+  "positions": [],
   "signals": [],
   "vetoes": [],
   "orders": [],
   "exits": [],
   "protected": [],
-  "skipped": [
-    {
-      "symbol": "AMD",
-      "reason": "already holding 5 positions (max 5)"
-    },
-    {
-      "symbol": "EEM",
-      "reason": "already holding 5 positions (max 5)"
-    },
-    {
-      "symbol": "INTC",
-      "reason": "already holding 5 positions (max 5)"
-    },
-    {
-      "symbol": "KRE",
-      "reason": "already holding 5 positions (max 5)"
-    },
-    {
-      "symbol": "LIN",
-      "reason": "already holding 5 positions (max 5)"
-    },
-    {
-      "symbol": "LLY",
-      "reason": "already holding 5 positions (max 5)"
-    },
-    {
-      "symbol": "MRVL",
-      "reason": "already holding 5 positions (max 5)"
-    },
-    {
-      "symbol": "PM",
-      "reason": "already holding 5 positions (max 5)"
-    },
-    {
-      "symbol": "PNC",
-      "reason": "already holding 5 positions (max 5)"
-    },
-    {
-      "symbol": "SBUX",
-      "reason": "already holding 5 positions (max 5)"
-    },
-    {
-      "symbol": "SMH",
-      "reason": "already holding 5 positions (max 5)"
-    },
-    {
-      "symbol": "WFC",
-      "reason": "already holding 5 positions (max 5)"
-    }
-  ],
+  "skipped": [],
   "findings": [],
-  "briefing": "Research is off. Add ANTHROPIC_API_KEY to your .env file to get a written briefing here.",
+  "briefing": "",
   "recent_trades": [],
-  "errors": [],
+  "errors": [
+    "run attempted during market hours"
+  ],
   "strategy_by_symbol": {
     "CL": "reversion",
     "JCI": "pullback",
