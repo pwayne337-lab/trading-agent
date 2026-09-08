@@ -1,25 +1,100 @@
 {
-  "updated_at": "2026-09-08T15:55:19+00:00",
+  "updated_at": "2026-09-08T23:31:25+00:00",
   "mode": "paper",
   "healthy": false,
-  "account": {},
-  "positions": [],
+  "account": {
+    "equity": 99634.63,
+    "cash": 2770.57,
+    "buying_power": 282301.65,
+    "status": "ACTIVE",
+    "pattern_day_trader": null,
+    "trading_blocked": false,
+    "mode": "PAPER"
+  },
+  "positions": [
+    {
+      "symbol": "CL",
+      "shares": 224,
+      "avg_entry": 88.24,
+      "market_value": 19803.84,
+      "unrealized_pl": 38.08
+    },
+    {
+      "symbol": "DIA",
+      "shares": 46,
+      "avg_entry": 536.144783,
+      "market_value": 24282.02,
+      "unrealized_pl": -380.640018
+    },
+    {
+      "symbol": "JCI",
+      "shares": 128,
+      "avg_entry": 146.42,
+      "market_value": 18735.36,
+      "unrealized_pl": -6.4
+    },
+    {
+      "symbol": "KLAC",
+      "shares": 51,
+      "avg_entry": 188.594902,
+      "market_value": 9639.0,
+      "unrealized_pl": 20.659998
+    },
+    {
+      "symbol": "QQQ",
+      "shares": 34,
+      "avg_entry": 718.85,
+      "market_value": 24403.84,
+      "unrealized_pl": -37.06
+    }
+  ],
   "signals": [],
   "vetoes": [],
   "orders": [],
-  "exits": [],
+  "exits": [
+    {
+      "symbol": "DIA",
+      "reason": "trend break: closed at $528.03, below the 50-day average of $528.74",
+      "status": "accepted",
+      "unrealized_pl": -380.640018
+    },
+    {
+      "symbol": "KLAC",
+      "reason": "trend break: closed at $188.98, below the 50-day average of $204.40",
+      "status": "accepted",
+      "unrealized_pl": 20.659998
+    }
+  ],
   "protected": [],
   "skipped": [],
-  "findings": [],
-  "briefing": "",
+  "findings": [
+    {
+      "severity": "critical",
+      "agent": "reconcile",
+      "message": "UNPROTECTED: no stop order behind CL, JCI, KLAC. These positions have no exit working at the broker."
+    },
+    {
+      "severity": "info",
+      "agent": "watchdog",
+      "message": "the previous run (2026-09-08) ended with 1 error(s), since resolved: run attempted during market hours"
+    },
+    {
+      "severity": "info",
+      "agent": "reconcile",
+      "message": "new since last run: CL, DIA, JCI, KLAC, QQQ"
+    }
+  ],
+  "briefing": "Research is off. Add ANTHROPIC_API_KEY to your .env file to get a written briefing here.",
   "recent_trades": [],
   "errors": [
-    "run attempted during market hours"
+    "could not place a stop on CL: POST /v2/orders -> 403: {\"available\":\"0\",\"code\":40310000,\"existing_qty\":\"224\",\"held_for_orders\":\"224\",\"message\":\"insufficient qty available for order (requested: 224, available: 0)\",\"related_orders\":[\"47eb3067-0738-4fd4-be38-633d432a18b7\"],\"symbol\":\"CL\"}",
+    "could not place a stop on JCI: POST /v2/orders -> 403: {\"available\":\"0\",\"code\":40310000,\"existing_qty\":\"128\",\"held_for_orders\":\"128\",\"message\":\"insufficient qty available for order (requested: 128, available: 0)\",\"related_orders\":[\"2f0c445c-2f30-49bb-b8df-c2e5eba19da9\"],\"symbol\":\"JCI\"}",
+    "could not place a stop on KLAC: POST /v2/orders -> 403: {\"available\":\"0\",\"code\":40310000,\"existing_qty\":\"51\",\"held_for_orders\":\"51\",\"message\":\"insufficient qty available for order (requested: 51, available: 0)\",\"related_orders\":[\"f3a3033b-9974-4793-8d02-6a16265e17d5\"],\"symbol\":\"KLAC\"}",
+    "UNPROTECTED: no stop order behind CL, JCI, KLAC. These positions have no exit working at the broker."
   ],
   "strategy_by_symbol": {
     "CL": "reversion",
-    "JCI": "pullback",
-    "KLAC": "pullback"
+    "JCI": "pullback"
   },
   "research": {
     "llm_calls": 0,
