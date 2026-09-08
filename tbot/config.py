@@ -206,8 +206,15 @@ class RiskConfig:
     # position so large that one gap wipes out the account.
     max_position_pct: float = 0.25
 
-    # No more than this many open trades at once.
-    max_open_positions: int = 5
+    # No more than this many open trades at once. Raised from 5 to 15 on
+    # 2026-09-07: with three strategies now sharing the watchlist, more
+    # candidates qualify on a given day than five slots can hold, so the cap
+    # was throwing away real signals rather than protecting against overreach.
+    # A backtest sweep (5/8/10/15/20/30 slots, same 3-strategy config) showed
+    # trade count and CAGR both climbing up to ~15 slots and then flattening,
+    # with drawdown essentially unchanged -- the risk-per-trade and
+    # correlation caps below are what actually bound risk, not this number.
+    max_open_positions: int = 15
 
     # Refuse a new trade that moves almost identically to something you
     # already hold. Without this, an agent watching index ETFs will happily

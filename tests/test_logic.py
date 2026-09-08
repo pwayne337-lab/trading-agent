@@ -137,7 +137,7 @@ o3 = size_position(10_000, entry=100.0, stop=101.0, cfg_risk=cfg.risk,
 check("a stop above entry is refused", not o3.ok and o3.shares == 0)
 
 o4 = size_position(10_000, entry=100.0, stop=98.0, cfg_risk=cfg.risk,
-                   cfg_strategy=cfg.strategy, open_positions=5)
+                   cfg_strategy=cfg.strategy, open_positions=cfg.risk.max_open_positions)
 check("position count limit is enforced", not o4.ok, o4.rejected_reason or "")
 
 o5 = size_position(10_000, entry=100.0, stop=98.0, cfg_risk=cfg.risk,
