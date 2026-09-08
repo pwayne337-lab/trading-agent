@@ -183,6 +183,194 @@ def cmd_run(args):
         raise
 
 
+def cmd_monitor(args):
+    """A mid-session safety check. Reads the account, runs the watchers, puts a
+    stop behind anything holding none, and rebuilds the dashboard. It opens
+    nothing and closes nothing.
+
+    Why it may not trade: every entry, stop and exit in this system reads the
+    most recent daily bar. While the market is open that bar is still moving,
+    so a mid-session decision would be made on a close that has not happened.
+    The backtest only ever saw finished bars; letting the live agent act on
+    unfinished ones would make the two stop describing the same strategy, and
+    the backtest would stop predicting anything about the live account.
+
+    A missing stop is the exception, and it is why this exists. Waiting until
+    after the close to notice that a position has nothing behind it leaves it
+    naked for a whole session. The stop level is a documented approximation
+    either way, so placing it now on a moving price loses very little and
+    removes hours of exposure.
+
+    It deliberately writes no equity row and no run-log entry. Those feed the
+    drawdown breaker and the schedule watchdog, which count one trading run per
+    day; a second daily row would tell both of them a story that is not true.
+    """
+    load_dotenv()
+    cfg = build_config(args)
+
+    broker = AlpacaBroker(dry_run=not args.submit)
+
+    # Carry the previous run's record forward. This run refreshes the account
+    # and the checks, but it did not scan, so it has no signals or orders of
+    # its own. Writing blanks over the day's record would erase the trading
+    # run's work from the page every single midday.
+    prev = state.load_state() or {}
+    st = state.blank_state()
+    for key, value in prev.items():
+        if key in st:
+            st[key] = value
+
+    st["mode"] = "live" if broker.is_live else "paper"
+    # The dashboard says so out loud. Without it the page carries last night's
+    # orders under a timestamp from lunchtime, which reads as though the agent
+    # had just placed them.
+    st["monitor_only"] = True
+    st["errors"] = []
+    st["protected"] = []
+
+    print(describe_safety(broker, cfg))
+    if broker.is_live and not (cfg.allow_live_trading and args.i_understand_the_risk):
+        print("Refusing to continue against a live endpoint. Exiting.")
+        return
+
+    try:
+        acct = broker.account()
+        positions = broker.positions()
+    except BrokerError as exc:
+        print(f"\nCannot reach the broker: {exc}")
+        st["errors"].append(f"broker unreachable: {exc}")
+        st["healthy"] = False
+        state.save_state(st)
+        write_dashboard()
+        return
+
+    try:
+        orders_open = broker.open_orders()
+    except BrokerError as exc:
+        # Unknown is not empty. Every held position would read as unprotected,
+        # and this run would stack a second stop behind stops that already
+        # exist. One of them filling then leaves a naked short.
+        print(f"Cannot read working orders: {exc}")
+        print("Refusing to act on an unknown order book.")
+        st["errors"].append(f"could not read working orders: {exc}")
+        st["account"] = acct
+        st["positions"] = positions
+        st["healthy"] = False
+        state.save_state(st)
+        write_dashboard()
+        return
+
+    st["account"] = acct
+    st["positions"] = positions
+    equity = acct["equity"]
+    print(f"Account: {acct['mode']}  equity ${equity:,.2f}")
+    print(f"Holding {len(positions)}: "
+          f"{sorted(p['symbol'] for p in positions) or 'nothing'}\n")
+
+    # Only what is held. The watchlist is not needed to answer "is everything I
+    # own protected", and downloading all of it would make a check that should
+    # take seconds take minutes.
+    syms = sorted({p["symbol"] for p in positions})
+    bars = datamod.load_universe(syms, start=args.start, refresh=True) if syms else {}
+
+    prior_equity = state.load_equity_history()
+    prior_runs = state.load_runs()
+
+    def look(orders):
+        found = watch.run_all(bars, syms, acct, positions, orders,
+                              prev or None, prior_equity, runs=prior_runs)
+        if found:
+            print(f"Checks: {watch.summarize(found)}")
+            for f in found:
+                if f.severity != watch.INFO:
+                    print(f"  [{f.severity.upper()}] {f.agent}: {f.message}")
+            print()
+        return found
+
+    findings = look(orders_open)
+
+    repaired = protect_exposed(broker, cfg, bars, positions, orders_open, st,
+                               acknowledged=args.i_understand_the_risk)
+
+    # The watchers judged a picture this run has since changed.
+    if repaired:
+        try:
+            orders_open = broker.open_orders()
+        except BrokerError as exc:
+            st["errors"].append(f"could not re-read orders after protecting: {exc}")
+        else:
+            print(f"Re-checking after protecting {', '.join(repaired)}.")
+            findings = look(orders_open)
+
+    st["findings"] = [f.to_dict() for f in findings]
+    st["healthy"] = not st["errors"]
+    # save_state stamps updated_at itself.
+
+    state.save_state(st)
+    write_dashboard()
+    print("Monitoring check complete. No entries or exits were considered.")
+
+
+def protect_exposed(broker, cfg, bars, positions, orders_open, st,
+                    acknowledged=False):
+    """Put a stop behind every held position that has none. Returns the list of
+    symbols actually protected.
+
+    Detecting an unprotected position and then only writing it down leaves it
+    unprotected. Nothing else fixes it either: the entry path only opens new
+    trades, and the exit path waits for a close below an average that may be
+    days away. So the repair happens here, first, ahead of the decision to stop
+    trading on a critical finding, because the position is exposed for exactly
+    as long as nobody acts.
+
+    The level is two ATRs below the last close. That is the same distance the
+    breakout rules use, it cannot sit above the market and fire instantly, and
+    it is wide enough to survive ordinary noise. It is a guess, but a
+    documented one, and a guessed stop beats no stop.
+
+    Shared by the daily run and the mid-session monitor. Two copies of this
+    would drift, and the copy that drifted would be the one holding the only
+    safety net under a position nobody is watching.
+    """
+    exposed = watch.unprotected(positions, orders_open)
+    repaired = []
+    for sym, shares in sorted(exposed.items()):
+        df = bars.get(sym)
+        if df is None or len(df) < cfg.strategy.atr_period + 2:
+            st["errors"].append(f"cannot protect {sym}: no usable price data")
+            continue
+        prepared = prepare(df, cfg.strategy)
+        last = prepared.iloc[-1]
+        atr_val = float(last["atr"]) if not pd.isna(last["atr"]) else 0.0
+        close = float(last["close"])
+        if atr_val <= 0 or close <= 0:
+            st["errors"].append(f"cannot protect {sym}: no usable ATR")
+            continue
+        level = round(close - 2.0 * atr_val, 2)
+        try:
+            fill = broker.submit_stop(sym, shares, level,
+                                      allow_live=cfg.allow_live_trading,
+                                      acknowledged=acknowledged,
+                                      last_price=close)
+        except BrokerError as exc:
+            print(f"  {sym}: COULD NOT PROTECT, {exc}")
+            st["errors"].append(f"could not place a stop on {sym}: {exc}")
+            continue
+        if not fill.submitted:
+            # A dry run sends nothing. Printing PROTECTED and writing it into
+            # the record would be a false entry in the one log you most need to
+            # be able to trust.
+            print(f"  {sym}: would protect {shares} sh at ${level:,.2f} "
+                  f"({fill.status})")
+            continue
+        print(f"  {sym}: PROTECTED, stop on {shares} sh at ${level:,.2f} "
+              f"({fill.status})")
+        st["protected"].append({"symbol": sym, "shares": shares, "stop": level,
+                                "status": fill.status})
+        repaired.append(sym)
+    return repaired
+
+
 def _cmd_run(args):
     """The daily job: rules find setups, research screens them, orders go in,
     everything is recorded, the dashboard is rebuilt."""
@@ -343,53 +531,8 @@ def _cmd_run(args):
     findings = look(orders_open)
 
     # --- put a stop behind anything that has none, before anything else -----
-    # Detecting an unprotected position and then only writing it down leaves it
-    # unprotected. Nothing else in the run fixes it either: the entry path only
-    # opens new trades, and the exit path waits for a close below an average
-    # that may be days away. So the repair happens here, first, ahead of the
-    # decision to stop trading on a critical finding, because the position is
-    # exposed for exactly as long as nobody acts.
-    #
-    # The level is two ATRs below the last close. That is the same distance the
-    # breakout rules use, it cannot sit above the market and fire instantly,
-    # and it is wide enough to survive ordinary noise. It is a guess, but a
-    # documented one, and a guessed stop beats no stop.
-    exposed = watch.unprotected(positions, orders_open)
-    repaired = []
-    for sym, shares in sorted(exposed.items()):
-        df = bars.get(sym)
-        if df is None or len(df) < cfg.strategy.atr_period + 2:
-            st["errors"].append(f"cannot protect {sym}: no usable price data")
-            continue
-        prepared = prepare(df, cfg.strategy)
-        last = prepared.iloc[-1]
-        atr_val = float(last["atr"]) if not pd.isna(last["atr"]) else 0.0
-        close = float(last["close"])
-        if atr_val <= 0 or close <= 0:
-            st["errors"].append(f"cannot protect {sym}: no usable ATR")
-            continue
-        level = round(close - 2.0 * atr_val, 2)
-        try:
-            fill = broker.submit_stop(sym, shares, level,
-                                      allow_live=cfg.allow_live_trading,
-                                      acknowledged=args.i_understand_the_risk,
-                                      last_price=close)
-        except BrokerError as exc:
-            print(f"  {sym}: COULD NOT PROTECT, {exc}")
-            st["errors"].append(f"could not place a stop on {sym}: {exc}")
-            continue
-        if not fill.submitted:
-            # A dry run sends nothing. Printing PROTECTED and writing it into
-            # the record would be a false entry in the one log you most need to
-            # be able to trust.
-            print(f"  {sym}: would protect {shares} sh at ${level:,.2f} "
-                  f"({fill.status})")
-            continue
-        print(f"  {sym}: PROTECTED, stop on {shares} sh at ${level:,.2f} "
-              f"({fill.status})")
-        st["protected"].append({"symbol": sym, "shares": shares, "stop": level,
-                                "status": fill.status})
-        repaired.append(sym)
+    repaired = protect_exposed(broker, cfg, bars, positions, orders_open, st,
+                               acknowledged=args.i_understand_the_risk)
 
     # The watchers judged a picture this run has since changed. Re-reading the
     # broker is the only honest way to know whether the problem is still there:
@@ -812,6 +955,15 @@ def main():
                         help="run even while the market is open, on an "
                              "unfinished bar (for testing only)")
         pa.set_defaults(func=cmd_run)
+
+    mo = sub.add_parser("monitor",
+                        help="mid-session safety check: no entries, no exits")
+    common(mo, start="2023-01-01")
+    mo.add_argument("--submit", action="store_true",
+                    help="actually send the protective stops it finds missing")
+    mo.add_argument("--i-understand-the-risk", action="store_true",
+                    help="third safety lock, required only for live accounts")
+    mo.set_defaults(func=cmd_monitor)
 
     cp = sub.add_parser("compare", help="race several strategies against each other")
     common(cp, start="2005-01-01")

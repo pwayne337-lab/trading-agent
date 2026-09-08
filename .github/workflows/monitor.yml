@@ -1,0 +1,90 @@
+# A mid-session safety check. It does not trade.
+#
+# The daily run happens after the close, so a position that ends up with no
+# stop behind it -- a bracket leg rejected, a partial fill, a stop cancelled at
+# the broker -- stays naked for the whole session before anything notices. This
+# job looks once in the middle of the day, puts a stop behind anything holding
+# none, and republishes the dashboard so the page is current while the market
+# is open.
+#
+# It may not open or close anything, and the agent enforces that itself: every
+# entry and exit reads the most recent daily bar, and mid-session that bar is
+# still moving. The backtest only ever saw finished bars, so letting the live
+# agent act on unfinished ones would make the two stop describing the same
+# strategy. `agent.py monitor` has no entry or exit path at all.
+name: Midday monitor
+
+on:
+  # 15:00 UTC on weekdays: 11:00 ET in summer, 10:00 ET in winter. Cron does
+  # not follow daylight saving, and it does not need to here -- both times are
+  # well inside the session, which is all this job requires.
+  schedule:
+    - cron: "0 15 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: read       # it commits nothing, so it needs no write access
+  pages: write
+  id-token: write
+
+concurrency:
+  # Deliberately the same group as the daily run. The two are six hours apart
+  # and would never collide on their own, but either can be started by hand,
+  # and two agents reading the same order book at the same moment could each
+  # decide a position is unprotected and each place a stop for it. One of those
+  # filling would leave a short position nobody asked for.
+  group: daily-agent
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # This job can place orders, so it earns the same scrutiny as the one
+      # that trades.
+      - name: Verify the engine before letting it place anything
+        run: python -m tests.test_logic
+
+      - name: Verify the whole daily run against a fake broker
+        run: python -m tests.smoke_run
+
+      - name: Check the account
+        env:
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_API_SECRET: ${{ secrets.ALPACA_API_SECRET }}
+          ALPACA_BASE_URL: ${{ secrets.ALPACA_BASE_URL }}
+        run: python agent.py monitor --submit
+
+      # Nothing is committed back to the repo, on purpose. The state file and
+      # the equity history are the trading run's record of the day; a midday
+      # job writing to them would race the daily run's push for no benefit, and
+      # would leave the strategy map and the day's orders to be reconstructed
+      # from a run that never scanned. The page below is built from this run's
+      # own state in this same job, so it is current either way.
+      - uses: actions/upload-pages-artifact@v3
+        if: always()
+        with:
+          path: site
+
+  publish:
+    needs: monitor
+    runs-on: ubuntu-latest
+    concurrency:
+      group: pages-deploy
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

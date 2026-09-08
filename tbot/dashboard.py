@@ -104,6 +104,15 @@ def build_html(state: dict = None, history: list = None,
         banner = (f'<div class="banner warning"><strong>Getting old.</strong> '
                   f'Last run {age_str}. Fine over a weekend or a market holiday, '
                   f'not fine on a Wednesday.</div>')
+    elif state.get("monitor_only"):
+        # A mid-session check refreshed the account and the watchers, but it did
+        # not scan and it placed no trades. The orders and signals below are
+        # still the trading run's, and without saying so this page would show
+        # them under a lunchtime timestamp as though they had just happened.
+        banner = ('<div class="banner info"><strong>Mid-session check.</strong> '
+                  'Positions, orders and the safety checks below were refreshed '
+                  'just now. Any signals and orders shown are from the last '
+                  'after-close run; this check does not trade.</div>')
     else:
         banner = ""
 
@@ -296,6 +305,7 @@ def build_html(state: dict = None, history: list = None,
     border:1px solid var(--border);background:var(--surface-1)}}
   .banner.critical{{border-left:3px solid var(--critical)}}
   .banner.warning{{border-left:3px solid var(--warning)}}
+  .banner.info{{border-left:3px solid var(--series-1)}}
   .tiles{{display:grid;gap:9px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}}
   .tile{{background:var(--surface-1);border:1px solid var(--border);
     border-radius:10px;padding:12px 14px}}

@@ -208,6 +208,39 @@ def run(positions, orders, submit=True, broker=None):
     return broker, state_mod.load_state()
 
 
+def run_monitor(positions, orders, submit=True, broker=None, seed_state=None):
+    """Same wiring as run(), but calls the mid-session monitor."""
+    bars = build_bars()
+    if broker is None:
+        broker = FakeBroker(positions, orders, dry_run=not submit)
+
+    agent_mod.AlpacaBroker = lambda **kw: broker
+    datamod.load_universe = lambda syms, start=None, end=None, refresh=False: bars
+
+    tmp = Path(tempfile.mkdtemp())
+    state_mod.STATE_DIR = tmp
+    state_mod.STATE_FILE = tmp / "agent_state.json"
+    state_mod.EQUITY_FILE = tmp / "equity_history.csv"
+    state_mod.RUNLOG_FILE = tmp / "run_log.jsonl"
+
+    if seed_state is not None:
+        state_mod.save_state(dict(seed_state))
+
+    from tbot import dashboard as dash_mod
+    dash_mod.SITE = tmp
+    agent_mod.write_dashboard = lambda title="Trading agent": (
+        (tmp / "index.html").write_text(dash_mod.build_html(title=title))
+        or (tmp / "index.html"))
+
+    args = argparse.Namespace(
+        symbols="UP,DOWNTREND,TWIN,FLAT", start="2016-01-01", equity=None,
+        risk=None, refresh=True, submit=submit,
+        i_understand_the_risk=False)
+
+    agent_mod.cmd_monitor(args)
+    return broker, state_mod.load_state(), tmp
+
+
 # ---------------------------------------------------------------------------
 print("\nA. A broken-down position gets sold")
 # ---------------------------------------------------------------------------
@@ -467,6 +500,109 @@ check("a mid-session run still records the positions it found",
       [p["symbol"] for p in st2["positions"]] == ["UP"], str(st2["positions"]))
 check("and still records the account, so equity is not blanked",
       bool(st2["account"]) and st2["account"].get("equity"), str(st2["account"]))
+
+
+# ---------------------------------------------------------------------------
+print("\nE4. The mid-session monitor watches without trading")
+# ---------------------------------------------------------------------------
+# It runs while the market is open, so it must never act on the unfinished bar.
+# The one thing it may do is put a stop behind a position that has none: that
+# exposure is real for the whole session, and the stop level is an documented
+# approximation whenever it is placed.
+
+class MonitorBroker(FakeBroker):
+    def clock(self):
+        return {"is_open": True}
+
+
+# A position in a clear downtrend, which the daily run would sell outright.
+_falling = [{"symbol": "DOWNTREND", "shares": 10, "avg_entry": 100.0,
+             "market_value": 300.0, "unrealized_pl": -700.0}]
+_stop = [{"symbol": "DOWNTREND", "side": "sell", "id": "s1", "qty": "10",
+          "stop_price": "20.0", "status": "new", "order_type": "stop"}]
+
+b, st, _tmp = run_monitor(positions=_falling, orders=_stop,
+                          broker=MonitorBroker(_falling, list(_stop)))
+check("the monitor opens nothing", b.submitted == [], str(b.submitted))
+check("the monitor closes nothing, even a position in a downtrend",
+      b.closed == [], str(b.closed))
+check("the monitor does not log a market-hours error",
+      not any("market hours" in e for e in st["errors"]), str(st["errors"]))
+check("the monitor marks itself on the page", st.get("monitor_only") is True)
+check("the monitor records what it holds",
+      [p["symbol"] for p in st["positions"]] == ["DOWNTREND"], str(st["positions"]))
+
+# The whole point: an unprotected position does not wait until the close.
+_naked = [{"symbol": "UP", "shares": 10, "avg_entry": 100.0,
+           "market_value": 1200.0, "unrealized_pl": 200.0}]
+b2, st2, _ = run_monitor(positions=_naked, orders=[],
+                         broker=MonitorBroker(_naked, []))
+check("an unprotected position IS given a stop mid-session",
+      [p["symbol"] for p in b2.protected] == ["UP"], str(b2.protected))
+check("and the stop sits below the market",
+      b2.protected and b2.protected[0]["stop"] > 0, str(b2.protected))
+check("the repair is written into the record",
+      [p["symbol"] for p in st2["protected"]] == ["UP"], str(st2["protected"]))
+check("protecting is still not trading", b2.submitted == [] and b2.closed == [],
+      f"submitted={b2.submitted} closed={b2.closed}")
+
+# A dry run must not claim it protected anything.
+b3, st3, _ = run_monitor(positions=_naked, orders=[], submit=False,
+                         broker=MonitorBroker(_naked, [], dry_run=True))
+check("a dry monitor run sends no stop", b3.protected == [], str(b3.protected))
+check("and records no protection it did not perform",
+      st3["protected"] == [], str(st3["protected"]))
+
+# It did not scan, so it must not erase the trading run's record of the day.
+_yesterday = dict(state_mod.blank_state())
+_yesterday.update({
+    "orders": [{"symbol": "KLAC", "shares": 51, "stop": 166.12,
+                "target": 224.56, "dollars_at_risk": 993.55}],
+    "signals": [{"symbol": "KLAC"}],
+    "skipped": [{"symbol": "AMD", "reason": "already holding 5 positions"}],
+    "strategy_by_symbol": {"KLAC": "pullback"},
+})
+b4, st4, _ = run_monitor(positions=_naked, orders=[],
+                         broker=MonitorBroker(_naked, []),
+                         seed_state=_yesterday)
+check("the day's orders survive a monitoring check",
+      [o["symbol"] for o in st4["orders"]] == ["KLAC"], str(st4["orders"]))
+check("so does what it skipped and why",
+      [x["symbol"] for x in st4["skipped"]] == ["AMD"], str(st4["skipped"]))
+check("and the strategy map, which nothing else can rebuild",
+      st4["strategy_by_symbol"] == {"KLAC": "pullback"},
+      str(st4["strategy_by_symbol"]))
+
+# The equity curve and the run log count one trading run per day. A midday row
+# in either would misinform the drawdown breaker and the schedule watchdog.
+b5, st5, tmp5 = run_monitor(positions=_naked, orders=[],
+                            broker=MonitorBroker(_naked, []))
+check("no equity row is written by a monitoring check",
+      not (tmp5 / "equity_history.csv").exists(),
+      str(list(tmp5.iterdir())))
+check("and no run-log entry either",
+      not (tmp5 / "run_log.jsonl").exists(), str(list(tmp5.iterdir())))
+
+# Unknown is not empty. If the order book cannot be read, every held position
+# looks unprotected and the repair path would stack a second stop behind one
+# that already exists.
+from tbot.broker import BrokerError as _BErr
+
+
+class BlindMonitor(MonitorBroker):
+    def open_orders(self):
+        raise _BErr("500 from the broker")
+
+
+b6, st6, _ = run_monitor(positions=_naked, orders=[],
+                         broker=BlindMonitor(_naked, []))
+check("an unreadable order book stops the monitor before it protects anything",
+      b6.protected == [], str(b6.protected))
+check("and it says why", any("working orders" in e for e in st6["errors"]),
+      str(st6["errors"]))
+check("but it still records the account it did read",
+      bool(st6["account"]) and [p["symbol"] for p in st6["positions"]] == ["UP"],
+      str(st6["positions"]))
 
 
 # ---------------------------------------------------------------------------
