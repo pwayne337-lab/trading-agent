@@ -46,6 +46,12 @@ def blank_state() -> dict:
         "briefing": "",
         "recent_trades": [],
         "errors": [],
+        # Set when a run stopped before it read fresh numbers and the figures
+        # above were carried over from the run named here. The dashboard dates
+        # them by this stamp, so a page rebuilt by an aborted run cannot pass
+        # off the previous run's snapshot as a new measurement.
+        "carried_from": None,
+        "carried_reason": "",
         # Which rule set opened each open position. The broker does not record
         # this and cannot, but the exits differ per strategy, so without it a
         # mean reversion trade would be managed by the trend exit and closed

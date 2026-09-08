@@ -80,7 +80,13 @@ def build_html(state: dict = None, history: list = None,
     skipped = state.get("skipped") or []
     errors = state.get("errors") or []
 
-    age_str, age_hrs, age_sev = _age(state.get("updated_at"))
+    # When a run stopped early the figures below were carried over from an
+    # earlier run, so they must be dated by that run and not by the aborted one
+    # that happened to rebuild the page. Otherwise a page full of week-old
+    # numbers reports itself as minutes old, which is the one thing a
+    # monitoring page must never do.
+    carried_from = state.get("carried_from")
+    age_str, age_hrs, age_sev = _age(carried_from or state.get("updated_at"))
 
     # Day change from the equity history.
     day_change = 0.0
@@ -115,6 +121,15 @@ def build_html(state: dict = None, history: list = None,
                   'after-close run; this check does not trade.</div>')
     else:
         banner = ""
+
+    if carried_from:
+        why = _esc(state.get("carried_reason") or "the run stopped early")
+        banner += (f'<div class="banner warning"><strong>Carried forward.</strong> '
+                   f'The last run stopped before it read the account, because '
+                   f'{why}. Every figure below is from the run of '
+                   f'{_esc(carried_from)} UTC and has not been re-measured '
+                   f'since. Nothing about the account has changed; only this '
+                   f'page is waiting on a clean run.</div>')
 
     # The watchers come first. A missing stop order matters more than the
     # equity number sitting under it.
@@ -251,7 +266,15 @@ def build_html(state: dict = None, history: list = None,
 
     stamp = (f"Generated {state['updated_at']} UTC from the agent's own run records"
              if state.get("updated_at") else "This page has not been generated from a real run yet")
+    if carried_from:
+        stamp += f", carrying the figures from the run of {carried_from} UTC"
+    # Two timestamps, because they answer two different questions. DATED is how
+    # old the numbers on the page are, and drives the age tile and the stale
+    # banner. BUILT is which run wrote this file, and is compared against
+    # data.json to notice a newer run. Collapsing them would either misdate the
+    # figures or send the browser to reload a page it is already showing.
     built_iso = str(state.get("updated_at") or "")
+    dated_iso = str(carried_from or state.get("updated_at") or "")
 
     return f"""<!doctype html>
 <html lang="en">
@@ -398,6 +421,7 @@ def build_html(state: dict = None, history: list = None,
 --------------------------------------------------------------------------- */
 (function () {{
   var BUILT = "{built_iso}";
+  var DATED = "{dated_iso}";
 
   function ageParts(iso) {{
     if (!iso) return {{ text: "never run", hrs: 1e9, sev: "warning" }};
@@ -413,7 +437,7 @@ def build_html(state: dict = None, history: list = None,
   }}
 
   function paint() {{
-    var a = ageParts(BUILT);
+    var a = ageParts(DATED);
     var val = document.getElementById("age-val");
     var tile = document.getElementById("age-tile");
     if (val) val.textContent = a.text;
@@ -423,7 +447,7 @@ def build_html(state: dict = None, history: list = None,
     if (!host) return;
     var old = document.getElementById("stale-banner");
     if (old) old.parentNode.removeChild(old);
-    if (a.hrs > 30 && BUILT) {{
+    if (a.hrs > 30 && DATED) {{
       var b = document.createElement("div");
       b.id = "stale-banner";
       b.className = "banner " + (a.hrs > 96 ? "critical" : "warning");
@@ -505,6 +529,7 @@ def write_dashboard(title: str = "Trading agent") -> Path:
     st = load_state()
     (SITE / "data.json").write_text(json.dumps({
         "updated_at": st.get("updated_at"),
+        "carried_from": st.get("carried_from"),
         "mode": st.get("mode"),
         "equity": (st.get("account") or {}).get("equity"),
         "positions": len(st.get("positions") or []),

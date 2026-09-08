@@ -16,6 +16,7 @@ See broker.py.
 from __future__ import annotations
 
 import argparse
+import copy
 import os
 import sys
 from pathlib import Path
@@ -227,6 +228,12 @@ def cmd_monitor(args):
     st["monitor_only"] = True
     st["errors"] = []
     st["protected"] = []
+    # The loop above copies every key blank_state defines, which includes the
+    # carry markers an aborted run may have left behind. This check does read
+    # the account, so leaving them set would have the page warn that the
+    # figures are old at the moment they were re-measured.
+    st["carried_from"] = None
+    st["carried_reason"] = ""
 
     print(describe_safety(broker, cfg))
     if broker.is_live and not (cfg.allow_live_trading and args.i_understand_the_risk):
@@ -240,6 +247,7 @@ def cmd_monitor(args):
         print(f"\nCannot reach the broker: {exc}")
         st["errors"].append(f"broker unreachable: {exc}")
         st["healthy"] = False
+        _carry_display(st, prev, "the broker could not be reached")
         state.save_state(st)
         write_dashboard()
         return
@@ -371,6 +379,34 @@ def protect_exposed(broker, cfg, bars, positions, orders_open, st,
     return repaired
 
 
+# What the dashboard draws. A run that stops early has none of it, and
+# save_state replaces the file wholesale rather than merging into it, so
+# without carrying these forward an aborted run publishes blank_state's
+# defaults as though they were measurements: $0.00 equity, no positions, no
+# briefing. Nothing about the account changed -- only the page did, and it read
+# like the account had been wiped out.
+_DISPLAY_KEYS = ("account", "positions", "signals", "vetoes", "orders", "exits",
+                 "protected", "skipped", "findings", "briefing", "recent_trades")
+
+
+def _carry_display(st, prev, reason):
+    """Copy the last good run's display block onto a run that stopped early.
+
+    The figures stay a single consistent snapshot from one run rather than a
+    mixture of fresh and stale, and `carried_from` dates them by the run they
+    actually came from so the page can say so out loud. A first-ever run has
+    nothing to carry, and blank is then the truth.
+    """
+    if not (prev or {}).get("updated_at"):
+        return st
+    for key in _DISPLAY_KEYS:
+        if key in prev:
+            st[key] = copy.deepcopy(prev[key])
+    st["carried_from"] = prev["updated_at"]
+    st["carried_reason"] = reason
+    return st
+
+
 def _cmd_run(args):
     """The daily job: rules find setups, research screens them, orders go in,
     everything is recorded, the dashboard is rebuilt."""
@@ -408,6 +444,7 @@ def _cmd_run(args):
         print(f"\nCannot reach the broker: {exc}")
         print("Set ALPACA_API_KEY and ALPACA_API_SECRET in .env (see .env.example).")
         st["errors"] = [f"broker unreachable: {exc}"]
+        _carry_display(st, _prev, "the broker could not be reached")
         state.save_state(st)
         # Rebuild the page even on failure, so the dashboard reports the
         # outage instead of silently showing yesterday's numbers as current.
@@ -433,9 +470,13 @@ def _cmd_run(args):
         # Record what the broker already told us. Refusing to trade is not the
         # same as having nothing: without these two lines the saved state keeps
         # blank_state's empty account and position list, and the dashboard
-        # redraws as though the account held nothing at all.
+        # redraws as though the account held nothing at all. On a first-ever
+        # run this is all there is; after that _carry_display below replaces
+        # them with the last complete snapshot, so the page shows one coherent
+        # set of figures under one timestamp instead of a mixture.
         st["account"] = acct
         st["positions"] = positions
+        _carry_display(st, _prev, "the run was started while the market was open")
         state.save_state(st)
         write_dashboard()
         return
@@ -457,6 +498,7 @@ def _cmd_run(args):
         st["errors"].append(f"could not read working orders: {exc}")
         st["account"] = acct
         st["positions"] = positions
+        _carry_display(st, _prev, "the working orders could not be read")
         state.save_state(st)
         write_dashboard()
         return
@@ -480,6 +522,8 @@ def _cmd_run(args):
     if acct.get("trading_blocked"):
         st["errors"].append("trading blocked on this account")
         st["account"] = acct
+        st["positions"] = positions
+        _carry_display(st, _prev, "trading is blocked on this account")
         state.save_state(st)
         write_dashboard()
         print("Trading is blocked on this account. Exiting.")

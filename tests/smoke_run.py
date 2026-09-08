@@ -12,6 +12,7 @@ Run with:  python -m tests.smoke_run
 """
 
 import argparse
+import json
 import sys
 import tempfile
 from pathlib import Path
@@ -22,6 +23,7 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import agent as agent_mod
+from tbot import dashboard as dash_mod
 from tbot import data as datamod
 from tbot import state as state_mod
 from tbot.broker import Fill
@@ -176,7 +178,11 @@ def build_bars():
             "FLAT": _end_today(make_series(n=500, seed=12, drift=0.0, vol=0.006))}
 
 
-def run(positions, orders, submit=True, broker=None):
+def run(positions, orders, submit=True, broker=None, previous=None):
+    """`previous` is a snapshot left on disk by an earlier run, as cmd_run
+    would find it. It is written straight to the file rather than through
+    save_state, which restamps updated_at and would leave nothing exact to
+    compare carried_from against."""
     bars = build_bars()
     if broker is None:
         broker = FakeBroker(positions, orders, dry_run=not submit)
@@ -189,6 +195,10 @@ def run(positions, orders, submit=True, broker=None):
     state_mod.STATE_FILE = tmp / "agent_state.json"
     state_mod.EQUITY_FILE = tmp / "equity_history.csv"
     state_mod.RUNLOG_FILE = tmp / "run_log.jsonl"
+
+    if previous is not None:
+        state_mod.STATE_FILE.write_text(
+            json.dumps(previous, indent=2, default=str))
 
     # Send the generated page somewhere disposable. Without this the test
     # overwrites the real site/index.html with invented numbers, and the next
@@ -500,6 +510,49 @@ check("a mid-session run still records the positions it found",
       [p["symbol"] for p in st2["positions"]] == ["UP"], str(st2["positions"]))
 check("and still records the account, so equity is not blanked",
       bool(st2["account"]) and st2["account"].get("equity"), str(st2["account"]))
+check("with no earlier run on disk there is nothing to carry, and it says so",
+      st2.get("carried_from") is None, str(st2.get("carried_from")))
+
+# A run that stops here never reaches the account, the scan or the briefing,
+# and save_state replaces the file wholesale rather than merging into it. So
+# everything the page draws has to be carried over from the last run that
+# finished, or the dashboard is rebuilt from blank_state and publishes $0.00
+# equity, no positions and no briefing -- a page that reads exactly like an
+# account that has been wiped out, on a day nothing happened to the account.
+_PREV_STAMP = "2026-09-07T23:39:18+00:00"
+_prev_snap = state_mod.blank_state()
+_prev_snap.update({
+    "updated_at": _PREV_STAMP,
+    "mode": "paper",
+    "healthy": True,
+    "account": {"equity": 99908.75, "cash": 50896.43, "buying_power": 293125.77,
+                "status": "ACTIVE", "trading_blocked": False, "mode": "PAPER"},
+    "positions": _held,
+    "briefing": "Written by a run that actually finished.",
+})
+# The broker reports nothing this time, so anything the state ends up holding
+# can only have come from the carried snapshot.
+b3, st3 = run(positions=[], orders=[], broker=OpenMarketBroker([], []),
+              previous=_prev_snap)
+check("an aborted run keeps the previous run's equity",
+      (st3["account"] or {}).get("equity") == 99908.75, str(st3["account"]))
+check("and the previous run's positions",
+      [p["symbol"] for p in st3["positions"]] == ["UP"], str(st3["positions"]))
+check("and the previous run's briefing",
+      st3["briefing"] == "Written by a run that actually finished.",
+      repr(st3["briefing"]))
+check("and dates them by the run they came from",
+      st3.get("carried_from") == _PREV_STAMP, str(st3.get("carried_from")))
+check("and says why the run that carried them stopped",
+      bool(st3.get("carried_reason")), str(st3.get("carried_reason")))
+check("the abort is still recorded as an error",
+      any("market hours" in e for e in st3["errors"]), str(st3["errors"]))
+
+_page = dash_mod.build_html(st3, history=[])
+check("the page warns that the figures were carried forward",
+      "Carried forward" in _page and _PREV_STAMP in _page)
+check("and never draws the account as empty",
+      "$0.00" not in _page and "99,908.75" in _page)
 
 
 # ---------------------------------------------------------------------------
