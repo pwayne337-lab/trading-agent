@@ -454,6 +454,20 @@ check("nothing is closed on an unfinished bar either", b.closed == [], str(b.clo
 check("the mid-session run says why it stopped",
       any("market hours" in e for e in st["errors"]), str(st["errors"]))
 
+# Refusing to trade is not the same as holding nothing. The broker was already
+# asked for the account and the positions before the session check ran, so a
+# run that stops here must still record them. If it does not, the dashboard is
+# rebuilt from a blank state and redraws the account as empty -- the held
+# positions vanish from the page until the next clean run puts them back.
+_held = [{"symbol": "UP", "shares": 10, "avg_entry": 100.0,
+          "market_value": 1200.0, "unrealized_pl": 200.0}]
+b2, st2 = run(positions=_held, orders=[],
+              broker=OpenMarketBroker(_held, []))
+check("a mid-session run still records the positions it found",
+      [p["symbol"] for p in st2["positions"]] == ["UP"], str(st2["positions"]))
+check("and still records the account, so equity is not blanked",
+      bool(st2["account"]) and st2["account"].get("equity"), str(st2["account"]))
+
 
 # ---------------------------------------------------------------------------
 print("\nF. The watchers refuse to trade on a broken picture")

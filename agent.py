@@ -242,6 +242,12 @@ def _cmd_run(args):
               "This agent trades on completed daily bars. Run it after the "
               "close, or pass --ignore-session to override.")
         st["errors"].append("run attempted during market hours")
+        # Record what the broker already told us. Refusing to trade is not the
+        # same as having nothing: without these two lines the saved state keeps
+        # blank_state's empty account and position list, and the dashboard
+        # redraws as though the account held nothing at all.
+        st["account"] = acct
+        st["positions"] = positions
         state.save_state(st)
         write_dashboard()
         return
