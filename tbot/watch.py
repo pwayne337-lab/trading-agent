@@ -187,6 +187,43 @@ def _flatten_orders(open_orders) -> List[dict]:
     return flat
 
 
+# The statuses the broker's open-orders endpoint can return for an order that
+# is still working. An allowlist, not a denylist: a state nobody thought of
+# must not count as live protection.
+WORKING_STATUSES = ("new", "accepted", "held", "partially_filled", "pending_new",
+                    "accepted_for_bidding", "calculated", "")
+
+
+def orphaned_targets(positions, open_orders) -> Dict[str, List[dict]]:
+    """Exposed symbols whose shares are reserved by a sell order that is not a
+    stop, keyed to those orders.
+
+    This is a bracket that lost its stop leg and kept its take-profit. The
+    survivor is not protection -- it only fills if the price goes up -- but it
+    reserves every share, so a replacement stop is rejected for insufficient
+    quantity and the position stays bare while the log fills with 403s.
+
+    Reported here rather than worked out again at the repair, so the alarm and
+    the fix can never disagree about which orders are in the way.
+    """
+    exposed = unprotected(positions, open_orders)
+    out: Dict[str, List[dict]] = {}
+    for o in _flatten_orders(open_orders):
+        sym = o.get("symbol")
+        if sym not in exposed:
+            continue
+        if not str(o.get("side", "")).startswith("sell"):
+            continue
+        if str(o.get("status") or "").lower() not in WORKING_STATUSES:
+            continue
+        if o.get("stop_price") not in (None, ""):
+            continue
+        if not o.get("id"):
+            continue
+        out.setdefault(sym, []).append(o)
+    return out
+
+
 def _stop_coverage(open_orders):
     """Shares covered by a working stop, per symbol, and every symbol with any
     sell order at all.

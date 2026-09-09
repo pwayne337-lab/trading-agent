@@ -65,10 +65,69 @@ class FakeBroker:
     def clock(self):
         return {"is_open": False}
 
+    def _reserved(self, symbol):
+        """Shares already spoken for by a working sell order, as Alpaca counts
+        them. Any sell order reserves the shares, whether or not it is a stop,
+        which is why an orphaned take-profit blocks a replacement stop."""
+        total = 0
+        for o in self._orders:
+            if o.get("symbol") != symbol:
+                continue
+            if not str(o.get("side", "")).startswith("sell"):
+                continue
+            try:
+                total += int(float(o.get("qty") or 0))
+            except (TypeError, ValueError):
+                continue
+        return total
+
+    def _refuse_if_reserved(self, symbol, shares):
+        owned = next((int(p["shares"]) for p in self._positions
+                      if p.get("symbol") == symbol), 0)
+        if owned > 0 and self._reserved(symbol) >= owned:
+            raise _BE(f'POST /v2/orders -> 403: {{"available":"0",'
+                      f'"code":40310000,"existing_qty":"{owned}",'
+                      f'"held_for_orders":"{owned}","message":"insufficient qty '
+                      f'available for order (requested: {shares}, available: 0)",'
+                      f'"symbol":"{symbol}"}}')
+
+    def cancel_order_ids(self, order_ids):
+        if self.dry_run:
+            return []
+        gone = []
+        for oid in order_ids:
+            if not oid:
+                continue
+            self._orders = [o for o in self._orders if o.get("id") != oid]
+            self.cancelled.append(oid)
+            gone.append(str(oid))
+        return gone
+
+    def submit_protective_oco(self, symbol, shares, stop, target,
+                              allow_live=False, acknowledged=False,
+                              last_price=None):
+        if self.dry_run:
+            return Fill(symbol, shares, "", "dry-run", False,
+                        f"would protect {symbol}")
+        if last_price is not None and stop >= last_price:
+            return Fill(symbol, 0, "", "rejected", False,
+                        "stop is not below the market")
+        if last_price is not None and target <= last_price:
+            return Fill(symbol, 0, "", "rejected", False,
+                        "target is not above the market")
+        self._refuse_if_reserved(symbol, shares)
+        self.protected.append({"symbol": symbol, "shares": shares,
+                               "stop": stop, "target": target})
+        self._orders.append({"symbol": symbol, "side": "sell",
+                             "id": "oco-" + symbol, "qty": str(shares),
+                             "stop_price": str(stop), "status": "new"})
+        return Fill(symbol, shares, "id", "accepted", True)
+
     def submit_stop(self, symbol, shares, stop, allow_live=False,
                     acknowledged=False, last_price=None):
         if self.dry_run:
             return Fill(symbol, shares, "", "dry-run", False, f"would protect {symbol}")
+        self._refuse_if_reserved(symbol, shares)
         # Mirror the real adapter: a stop at or above the market is not a stop.
         if last_price is not None and stop >= last_price:
             return Fill(symbol, 0, "", "rejected", False, "stop is not below the market")
@@ -932,6 +991,63 @@ check("every order it sent is in the strategy map",
           for o in st.get("orders") or []),
       f"orders={[o['symbol'] for o in st.get('orders') or []]} "
       f"map={st.get('strategy_by_symbol')}")
+
+
+# ---------------------------------------------------------------------------
+print("\nJ. A bracket that lost its stop and kept its target")
+# ---------------------------------------------------------------------------
+# Seen live on 2026-09-08: CL and JCI each held a single sell LIMIT and no
+# stop. The limit is not protection, it only fills if the price goes up, but
+# it reserves every share, so the replacement stop came back 403 insufficient
+# qty on every run and the positions stayed bare. The orphan has to be
+# cancelled before anything can protect the position.
+
+_bare = [{"symbol": "UP", "shares": 20, "avg_entry": 100.0,
+          "market_value": 2000.0, "unrealized_pl": 0.0}]
+
+# Target far above the market, as a real take-profit leg is.
+_orphan = [{"symbol": "UP", "side": "sell", "type": "limit", "qty": "20",
+            "limit_price": "999999", "status": "new", "id": "orphan-1"}]
+b, st = run(positions=list(_bare), orders=list(_orphan))
+
+check("the orphaned target is cancelled", "orphan-1" in b.cancelled,
+      str(b.cancelled))
+check("and the position ends up protected", bool(b.protected), str(b.protected))
+check("the replacement carries a stop below the market",
+      bool(b.protected) and b.protected[0]["stop"] > 0, str(b.protected))
+check("the target is put back rather than thrown away",
+      bool(b.protected) and b.protected[0].get("target") == 999999.0,
+      str(b.protected))
+check("the run records that it replaced an orphaned target",
+      any(x.get("replaced_orphaned_target") for x in st.get("protected") or []),
+      str(st.get("protected")))
+check("nothing is left exposed afterwards",
+      not watch.unprotected(_bare, b.open_orders()),
+      str(watch.unprotected(_bare, b.open_orders())))
+
+# The same position, but the surviving target sits below the market, so an OCO
+# would fill instantly. The orphan still has to go and a plain stop is the
+# right replacement.
+_low = [{"symbol": "UP", "side": "sell", "type": "limit", "qty": "20",
+         "limit_price": "0.01", "status": "new", "id": "orphan-2"}]
+b, st = run(positions=list(_bare), orders=list(_low))
+check("a target below the market is still cleared out of the way",
+      "orphan-2" in b.cancelled, str(b.cancelled))
+check("and a plain stop goes in instead of an OCO",
+      bool(b.protected) and not b.protected[0].get("target"), str(b.protected))
+check("leaving nothing exposed either way",
+      not watch.unprotected(_bare, b.open_orders()),
+      str(watch.unprotected(_bare, b.open_orders())))
+
+# A position that is properly protected already must not have its stop
+# cancelled by any of this.
+_ok = [{"symbol": "UP", "side": "sell", "type": "stop", "qty": "20",
+        "stop_price": "50.00", "status": "new", "id": "good-stop"}]
+b, st = run(positions=list(_bare), orders=list(_ok))
+check("a working stop is never treated as an orphan",
+      "good-stop" not in b.cancelled, str(b.cancelled))
+check("and no second stop is stacked behind it", not b.protected,
+      str(b.protected))
 
 
 print("\n" + "=" * 60)

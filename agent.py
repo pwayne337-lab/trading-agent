@@ -351,6 +351,12 @@ def protect_exposed(broker, cfg, bars, positions, orders_open, st,
     safety net under a position nobody is watching.
     """
     exposed = watch.unprotected(positions, orders_open)
+    # Shares reserved by an orphaned take-profit leg. Its bracket lost the stop
+    # and kept the target, so the position is bare while every share is spoken
+    # for, and a replacement stop comes back 403 insufficient qty. Cancelling
+    # the survivor is the only way to get a stop in, and the replacement goes
+    # back as an OCO pair so the target is not simply thrown away.
+    blocked = watch.orphaned_targets(positions, orders_open)
     repaired = []
     for sym, shares in sorted(exposed.items()):
         df = bars.get(sym)
@@ -365,14 +371,65 @@ def protect_exposed(broker, cfg, bars, positions, orders_open, st,
             st["errors"].append(f"cannot protect {sym}: no usable ATR")
             continue
         level = round(close - 2.0 * atr_val, 2)
+
+        # The orphaned target's own price, so the replacement keeps the exit
+        # the trade was opened with rather than inventing a new one.
+        loose = blocked.get(sym) or []
+        target = 0.0
+        for o in loose:
+            try:
+                target = max(target, float(o.get("limit_price") or 0))
+            except (TypeError, ValueError):
+                continue
+
+        if loose:
+            try:
+                gone = broker.cancel_order_ids([o.get("id") for o in loose])
+            except BrokerError as exc:
+                print(f"  {sym}: COULD NOT CLEAR THE ORPHANED TARGET, {exc}")
+                st["errors"].append(
+                    f"could not cancel the orphaned target on {sym}, so no stop "
+                    f"could be placed: {exc}")
+                continue
+            if not gone and not broker.dry_run:
+                st["errors"].append(
+                    f"the orphaned target on {sym} could not be cancelled, so "
+                    f"the shares stay reserved and unprotected")
+                continue
+            print(f"  {sym}: cancelled {len(gone)} orphaned target order(s) "
+                  f"holding the shares")
+
         try:
-            fill = broker.submit_stop(sym, shares, level,
-                                      allow_live=cfg.allow_live_trading,
-                                      acknowledged=acknowledged,
-                                      last_price=close)
+            if loose and target > close:
+                # Both legs, linked, replacing the pair the bracket lost.
+                fill = broker.submit_protective_oco(
+                    sym, shares, level, target,
+                    allow_live=cfg.allow_live_trading,
+                    acknowledged=acknowledged, last_price=close)
+                if not fill.submitted and fill.status == "rejected":
+                    # The pair was refused. A stop alone is worth more than a
+                    # target alone, and the target is already cancelled.
+                    print(f"  {sym}: OCO refused ({fill.detail}), "
+                          f"falling back to a plain stop")
+                    fill = broker.submit_stop(
+                        sym, shares, level, allow_live=cfg.allow_live_trading,
+                        acknowledged=acknowledged, last_price=close)
+            else:
+                fill = broker.submit_stop(sym, shares, level,
+                                          allow_live=cfg.allow_live_trading,
+                                          acknowledged=acknowledged,
+                                          last_price=close)
         except BrokerError as exc:
             print(f"  {sym}: COULD NOT PROTECT, {exc}")
-            st["errors"].append(f"could not place a stop on {sym}: {exc}")
+            if loose:
+                # Worth saying plainly: the blocking order was removed and
+                # nothing replaced it, so the position is now bare of orders
+                # entirely rather than bare of protection.
+                st["errors"].append(
+                    f"could not place a stop on {sym} after cancelling its "
+                    f"orphaned target, so it now has no orders at all: {exc}")
+            else:
+                st["errors"].append(f"could not place a stop on {sym}: {exc}")
             continue
         if not fill.submitted:
             # A dry run sends nothing. Printing PROTECTED and writing it into
@@ -384,6 +441,8 @@ def protect_exposed(broker, cfg, bars, positions, orders_open, st,
         print(f"  {sym}: PROTECTED, stop on {shares} sh at ${level:,.2f} "
               f"({fill.status})")
         st["protected"].append({"symbol": sym, "shares": shares, "stop": level,
+                                "target": target if loose and target > close else None,
+                                "replaced_orphaned_target": bool(loose),
                                 "status": fill.status})
         repaired.append(sym)
     return repaired

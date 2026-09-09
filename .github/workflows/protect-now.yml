@@ -1,0 +1,62 @@
+# Puts a stop behind any position that has none, without waiting for the
+# evening run. It opens nothing and closes nothing: the monitor command has no
+# entry and no exit path at all. Where a bracket lost its stop and kept its
+# take-profit, it cancels that orphaned target (which is what reserves the
+# shares and blocks the stop) and puts back a linked stop-and-target pair.
+#
+# Run it from the Actions tab: "Protect my positions now" -> Run workflow.
+# Safe to run repeatedly: a position that already has a stop is left alone.
+name: Protect my positions now
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  # Never alongside the daily run. Both touch the same order book.
+  group: daily-agent
+  cancel-in-progress: false
+
+jobs:
+  protect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Verify the engine before letting it touch the account
+        run: python -m tests.test_logic
+
+      - name: Verify the whole path against a fake broker
+        run: python -m tests.smoke_run
+
+      - name: Protect anything holding no stop
+        env:
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_API_SECRET: ${{ secrets.ALPACA_API_SECRET }}
+          ALPACA_BASE_URL: ${{ secrets.ALPACA_BASE_URL }}
+        run: python agent.py monitor --submit
+
+      - name: Commit what it did
+        if: always()
+        run: |
+          git config user.name "trading-agent"
+          git config user.email "actions@github.com"
+          mkdir -p state site
+          git add -A state site
+          git diff --staged --quiet && exit 0
+          git commit -m "protect $(date -u +%Y-%m-%dT%H:%M)"
+          for i in 1 2 3; do
+            git push && exit 0
+            git pull --rebase --autostash || break
+          done
+          exit 1

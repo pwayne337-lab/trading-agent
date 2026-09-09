@@ -345,6 +345,82 @@ class AlpacaBroker:
         })
         return Fill(symbol, shares, order.get("id", ""), order.get("status", "?"), True)
 
+    def cancel_order_ids(self, order_ids) -> List[str]:
+        """Cancel specific orders and return the ids that are now gone.
+
+        cancel_orders_for takes a whole symbol, which is right before a close
+        and wrong when one order is in the way and the others are protection.
+        An order that has already filled or been cancelled counts as gone: it
+        is not working any more, which is the only thing the caller asked.
+        """
+        if self.dry_run:
+            return []
+        gone: List[str] = []
+        for oid in order_ids:
+            if not oid:
+                continue
+            try:
+                self._request("DELETE", f"/v2/orders/{oid}")
+            except BrokerError:
+                pass   # filled or cancelled between reading and deleting
+            gone.append(str(oid))
+        return gone
+
+    def submit_protective_oco(self, symbol: str, shares: int, stop: float,
+                              target: float, allow_live: bool = False,
+                              acknowledged: bool = False,
+                              last_price: Optional[float] = None) -> Fill:
+        """Put a linked stop and take-profit behind a position that has neither.
+
+        One-cancels-other, so the pair behaves like the bracket legs it is
+        replacing: whichever fills removes the other. Submitting the two as
+        separate orders instead would leave the survivor working after the
+        position is closed, and a resting sell against no shares is how a long
+        becomes a short.
+        """
+        if self.is_live:
+            if not allow_live:
+                raise BrokerError(
+                    "refusing to trade a LIVE account: allow_live_trading is False in config")
+            if not acknowledged:
+                raise BrokerError(
+                    "refusing to trade a LIVE account: pass --i-understand-the-risk")
+
+        if shares < 1:
+            return Fill(symbol, 0, "", "rejected", False, "share count below 1")
+        if stop <= 0 or target <= 0:
+            return Fill(symbol, 0, "", "rejected", False, "stop or target is not positive")
+        if target <= stop:
+            return Fill(symbol, 0, "", "rejected", False,
+                        f"target {target:.2f} is not above stop {stop:.2f}")
+        if last_price is not None:
+            # Either leg on the wrong side of the market fills the moment it is
+            # accepted, which closes the position instead of protecting it.
+            if stop >= last_price:
+                return Fill(symbol, 0, "", "rejected", False,
+                            f"stop {stop:.2f} is not below the last price {last_price:.2f}")
+            if target <= last_price:
+                return Fill(symbol, 0, "", "rejected", False,
+                            f"target {target:.2f} is not above the last price {last_price:.2f}")
+
+        if self.dry_run:
+            return Fill(symbol, shares, "", "dry-run", False,
+                        f"would protect {shares} {symbol} with a stop at "
+                        f"{stop:.2f} and a target at {target:.2f}")
+
+        order = self._request("POST", "/v2/orders", json={
+            "symbol": symbol,
+            "qty": str(shares),
+            "side": "sell",
+            "type": "limit",
+            "limit_price": round(target, 2),
+            "time_in_force": "gtc",
+            "order_class": "oco",
+            "take_profit": {"limit_price": round(target, 2)},
+            "stop_loss": {"stop_price": round(stop, 2)},
+        })
+        return Fill(symbol, shares, order.get("id", ""), order.get("status", "?"), True)
+
     def cancel_orders_for(self, symbol: str) -> List[dict]:
         """Cancel every working order on one symbol. Returns what was cancelled.
 
