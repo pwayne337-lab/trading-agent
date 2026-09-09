@@ -1123,6 +1123,41 @@ check("and the position is still called unprotected",
       str([f.get("message") for f in st.get("findings") or []]))
 
 
+# ---------------------------------------------------------------------------
+print("\nL. A carried-forward alarm is dated, not presented as live")
+# ---------------------------------------------------------------------------
+# Findings travel with the figures they were made about. A red "needs
+# attention" beside numbers the page already admits are stale reads as a live
+# alarm, and an undated alarm is one nobody can act on.
+
+_stale_state = {
+    "updated_at": "2026-09-09T15:07:19+00:00",
+    "carried_from": "2026-09-09T14:34:49+00:00",
+    "carried_reason": "the run was started while the market was open",
+    "mode": "paper", "healthy": False,
+    "account": {"equity": 99211.81, "cash": 36523.97, "buying_power": 300000.0,
+                "status": "ACTIVE", "trading_blocked": False, "mode": "PAPER"},
+    "positions": [{"symbol": "CL", "shares": 224, "avg_entry": 88.24,
+                   "market_value": 19714.24, "unrealized_pl": -51.52}],
+    "findings": [{"severity": "critical", "agent": "reconcile",
+                  "message": "UNPROTECTED: no stop order behind CL."}],
+    "errors": ["run attempted during market hours"],
+}
+from tbot import dashboard as _dash
+_page = _dash.build_html(state=_stale_state, history=[])
+check("a carried finding is dated to the run it came from",
+      "2026-09-09T14:34" in _page, "no timestamp on the finding banner")
+check("and is not worded as if it were current",
+      "<strong>Needs attention.</strong>" not in _page,
+      "still says 'Needs attention.' with no date")
+
+_live_state = dict(_stale_state, carried_from=None, carried_reason="")
+_page = _dash.build_html(state=_live_state, history=[])
+check("a finding from a run that really read the account stays undated",
+      "<strong>Needs attention.</strong>" in _page,
+      "a live alarm should not be dated as carried")
+
+
 print("\n" + "=" * 60)
 if FAILURES:
     print(f"{len(FAILURES)} SMOKE CHECK(S) FAILED:")

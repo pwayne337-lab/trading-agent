@@ -134,17 +134,26 @@ def build_html(state: dict = None, history: list = None,
     # The watchers come first. A missing stop order matters more than the
     # equity number sitting under it.
     findings = state.get("findings") or []
+    # A finding is a judgement about the broker at a moment in time, and when
+    # the figures were carried forward these came with them. Saying "needs
+    # attention" with no date next to numbers that are openly stale reads as a
+    # live alarm, and a red banner nobody can date is one nobody can act on.
+    when = f" as of {_esc(str(carried_from)[:16])} UTC" if carried_from else ""
     for f in findings:
         sev = f.get("severity")
         if sev not in ("critical", "warning"):
             continue
         cls = "critical" if sev == "critical" else "warning"
-        label = "Needs attention." if sev == "critical" else "Worth a look."
+        label = ("Needed attention" + when + "." if sev == "critical"
+                 else "Worth a look" + when + ".")
+        if not carried_from:
+            label = "Needs attention." if sev == "critical" else "Worth a look."
         banner += (f'<div class="banner {cls}"><strong>{label}</strong> '
                    f'{_esc(f.get("message"))}</div>')
 
     if errors and not findings:
-        banner += ('<div class="banner critical"><strong>Errors on the last run.</strong> '
+        banner += (f'<div class="banner critical"><strong>Errors on the '
+                   f'{"carried-forward" if carried_from else "last"} run.</strong> '
                    + "; ".join(_esc(e) for e in errors[:3]) + '</div>')
 
     if mode == "LIVE":
