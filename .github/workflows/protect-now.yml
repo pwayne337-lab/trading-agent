@@ -4,11 +4,20 @@
 # take-profit, it cancels that orphaned target (which is what reserves the
 # shares and blocks the stop) and puts back a linked stop-and-target pair.
 #
-# Run it from the Actions tab: "Protect my positions now" -> Run workflow.
-# Safe to run repeatedly: a position that already has a stop is left alone.
+# Runs on a schedule every weekday late morning, and on demand from the
+# Actions tab: "Protect my positions now" -> Run workflow.
+#
+# Safe to run repeatedly: a position that already has a stop is left alone, and
+# it finds nothing to do on a market holiday or an empty account.
 name: Protect my positions now
 
 on:
+  # 16:00 UTC on weekdays. Cron does not follow daylight saving, so this is
+  # 11am Central in summer and 10am in winter -- both comfortably inside the
+  # 8:30am-3pm Central session, which is what matters. A stop that goes missing
+  # after the open gets replaced within hours instead of at the close.
+  schedule:
+    - cron: "0 16 * * 1-5"
   workflow_dispatch:
 
 permissions:
