@@ -1,11 +1,11 @@
 {
-  "updated_at": "2026-09-09T19:10:31+00:00",
+  "updated_at": "2026-09-09T23:25:09+00:00",
   "mode": "paper",
   "healthy": true,
   "account": {
-    "equity": 99200.36,
+    "equity": 99123.03,
     "cash": 36523.97,
-    "buying_power": 321589.77,
+    "buying_power": 321373.26,
     "status": "ACTIVE",
     "pattern_day_trader": null,
     "trading_blocked": false,
@@ -16,57 +16,290 @@
       "symbol": "CL",
       "shares": 224,
       "avg_entry": 88.24,
-      "market_value": 19757.92,
-      "unrealized_pl": -7.84
+      "market_value": 19718.72,
+      "unrealized_pl": -47.04
     },
     {
       "symbol": "JCI",
       "shares": 128,
       "avg_entry": 146.42,
-      "market_value": 18565.12,
-      "unrealized_pl": -176.64
+      "market_value": 18549.76,
+      "unrealized_pl": -192.0
     },
     {
       "symbol": "QQQ",
       "shares": 34,
       "avg_entry": 718.85,
-      "market_value": 24353.35,
-      "unrealized_pl": -87.55
+      "market_value": 24330.5836,
+      "unrealized_pl": -110.3164
     }
   ],
-  "signals": [],
+  "signals": [
+    {
+      "symbol": "ABNB",
+      "entry": 169.63,
+      "stop": 155.8214,
+      "target": 197.2472,
+      "shares": 71,
+      "strategy": "reversion",
+      "why": "RSI(2) at 3, below the 10-day average; stop 2.50x ATR below entry"
+    },
+    {
+      "symbol": "ABT",
+      "entry": 105.23,
+      "stop": 98.2729,
+      "target": 119.1442,
+      "shares": 142,
+      "strategy": "reversion",
+      "why": "RSI(2) at 5, below the 10-day average; stop 2.50x ATR below entry"
+    },
+    {
+      "symbol": "ADP",
+      "entry": 265.22,
+      "stop": 249.7518,
+      "target": 296.1564,
+      "shares": 35,
+      "strategy": "reversion",
+      "why": "RSI(2) at 3, below the 10-day average; stop 2.50x ATR below entry"
+    },
+    {
+      "symbol": "AMZN",
+      "entry": 252.4,
+      "stop": 236.2225,
+      "target": 284.755,
+      "shares": 1,
+      "strategy": "reversion",
+      "why": "RSI(2) at 9, below the 10-day average; stop 2.50x ATR below entry"
+    }
+  ],
   "vetoes": [],
-  "orders": [],
-  "exits": [
+  "orders": [
+    {
+      "symbol": "ABNB",
+      "shares": 71,
+      "stop": 155.8214,
+      "target": 197.2472,
+      "dollars_at_risk": 980.41,
+      "order_id": "3abc39f9-5ea9-4bcd-87f6-c09b439cf3c6",
+      "strategy": "reversion"
+    },
+    {
+      "symbol": "ABT",
+      "shares": 142,
+      "stop": 98.2729,
+      "target": 119.1442,
+      "dollars_at_risk": 987.91,
+      "order_id": "40331685-981c-4711-af88-26444a5f33c1",
+      "strategy": "reversion"
+    },
+    {
+      "symbol": "ADP",
+      "shares": 35,
+      "stop": 249.7518,
+      "target": 296.1564,
+      "dollars_at_risk": 541.39,
+      "order_id": "2bbfcb9a-a97e-4630-b9d2-f91bdc17ede6",
+      "strategy": "reversion"
+    },
+    {
+      "symbol": "AMZN",
+      "shares": 1,
+      "stop": 236.2225,
+      "target": 284.755,
+      "dollars_at_risk": 16.18,
+      "order_id": "7d8a1bdc-6fb8-49f0-aeb5-9bf4129fde13",
+      "strategy": "reversion"
+    }
+  ],
+  "exits": [],
+  "protected": [],
+  "skipped": [
+    {
+      "symbol": "AMGN",
+      "reason": "position would be less than one share"
+    },
+    {
+      "symbol": "APD",
+      "reason": "position would be less than one share"
+    },
+    {
+      "symbol": "BLK",
+      "reason": "position would be less than one share"
+    },
+    {
+      "symbol": "BMY",
+      "reason": "position would be less than one share"
+    },
+    {
+      "symbol": "CMG",
+      "reason": "position would be less than one share"
+    },
+    {
+      "symbol": "CRM",
+      "reason": "position would be less than one share"
+    },
+    {
+      "symbol": "CVX",
+      "reason": "position would be less than one share"
+    },
+    {
+      "symbol": "DIS",
+      "reason": "position would be less than one share"
+    },
+    {
+      "symbol": "EOG",
+      "reason": "position would be less than one share"
+    },
+    {
+      "symbol": "FDX",
+      "reason": "position would be less than one share"
+    },
+    {
+      "symbol": "GILD",
+      "reason": "position would be less than one share"
+    },
+    {
+      "symbol": "HYG",
+      "reason": "position would be less than one share"
+    },
+    {
+      "symbol": "IBB",
+      "reason": "position would be less than one share"
+    },
+    {
+      "symbol": "LLY",
+      "reason": "position would be less than one share"
+    },
+    {
+      "symbol": "MA",
+      "reason": "position would be less than one share"
+    },
+    {
+      "symbol": "MDLZ",
+      "reason": "position would be less than one share"
+    },
+    {
+      "symbol": "MMM",
+      "reason": "position would be less than one share"
+    },
+    {
+      "symbol": "MRSH",
+      "reason": "position would be less than one share"
+    },
+    {
+      "symbol": "PAYX",
+      "reason": "position would be less than one share"
+    },
+    {
+      "symbol": "PFE",
+      "reason": "position would be less than one share"
+    },
+    {
+      "symbol": "ROST",
+      "reason": "position would be less than one share"
+    },
+    {
+      "symbol": "RSP",
+      "reason": "position would be less than one share"
+    },
+    {
+      "symbol": "RTX",
+      "reason": "position would be less than one share"
+    },
+    {
+      "symbol": "SBUX",
+      "reason": "position would be less than one share"
+    },
+    {
+      "symbol": "SPOT",
+      "reason": "position would be less than one share"
+    },
+    {
+      "symbol": "T",
+      "reason": "position would be less than one share"
+    },
+    {
+      "symbol": "TGT",
+      "reason": "position would be less than one share"
+    },
+    {
+      "symbol": "UNP",
+      "reason": "position would be less than one share"
+    },
+    {
+      "symbol": "V",
+      "reason": "position would be less than one share"
+    },
+    {
+      "symbol": "VRTX",
+      "reason": "position would be less than one share"
+    },
+    {
+      "symbol": "XLB",
+      "reason": "position would be less than one share"
+    },
+    {
+      "symbol": "XLE",
+      "reason": "position would be less than one share"
+    },
+    {
+      "symbol": "XLP",
+      "reason": "position would be less than one share"
+    },
+    {
+      "symbol": "XLRE",
+      "reason": "position would be less than one share"
+    },
+    {
+      "symbol": "XLV",
+      "reason": "position would be less than one share"
+    }
+  ],
+  "findings": [],
+  "briefing": "Research is off. Add ANTHROPIC_API_KEY to your .env file to get a written briefing here.",
+  "recent_trades": [
+    {
+      "symbol": "KLAC",
+      "closed": "2026-09-09",
+      "shares": 1,
+      "avg_cost": 187.75,
+      "exit": 189.19,
+      "pnl": 1.44,
+      "reason": "sold"
+    },
     {
       "symbol": "DIA",
-      "reason": "trend break: closed at $528.03, below the 50-day average of $528.74",
-      "status": "accepted",
-      "unrealized_pl": -380.640018
+      "closed": "2026-09-09",
+      "shares": 46,
+      "avg_cost": 536.14,
+      "exit": 524.82,
+      "pnl": -520.94,
+      "reason": "sold"
     },
     {
       "symbol": "KLAC",
-      "reason": "trend break: closed at $188.98, below the 50-day average of $204.40",
-      "status": "accepted",
-      "unrealized_pl": 20.659998
+      "closed": "2026-09-09",
+      "shares": 50,
+      "avg_cost": 188.61,
+      "exit": 188.45,
+      "pnl": -8.09,
+      "reason": "sold"
     }
   ],
-  "protected": [],
-  "skipped": [],
-  "findings": [],
-  "briefing": "Research is off. Add ANTHROPIC_API_KEY to your .env file to get a written briefing here.",
-  "recent_trades": [],
   "errors": [],
   "carried_from": null,
   "carried_reason": "",
   "strategy_by_symbol": {
     "CL": "reversion",
-    "JCI": "pullback"
+    "JCI": "pullback",
+    "ABNB": "reversion",
+    "ABT": "reversion",
+    "ADP": "reversion",
+    "AMZN": "reversion"
   },
   "research": {
     "llm_calls": 0,
     "llm_errors": 0,
     "enabled": false
-  },
-  "monitor_only": true
+  }
 }
