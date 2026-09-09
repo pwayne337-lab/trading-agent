@@ -1,11 +1,11 @@
 {
-  "updated_at": "2026-09-09T15:14:38+00:00",
+  "updated_at": "2026-09-09T19:10:31+00:00",
   "mode": "paper",
   "healthy": true,
   "account": {
-    "equity": 99190.93,
+    "equity": 99200.36,
     "cash": 36523.97,
-    "buying_power": 321563.37,
+    "buying_power": 321589.77,
     "status": "ACTIVE",
     "pattern_day_trader": null,
     "trading_blocked": false,
@@ -16,22 +16,22 @@
       "symbol": "CL",
       "shares": 224,
       "avg_entry": 88.24,
-      "market_value": 19741.12,
-      "unrealized_pl": -24.64
+      "market_value": 19757.92,
+      "unrealized_pl": -7.84
     },
     {
       "symbol": "JCI",
       "shares": 128,
       "avg_entry": 146.42,
-      "market_value": 18612.48,
-      "unrealized_pl": -129.28
+      "market_value": 18565.12,
+      "unrealized_pl": -176.64
     },
     {
       "symbol": "QQQ",
       "shares": 34,
       "avg_entry": 718.85,
-      "market_value": 24312.72,
-      "unrealized_pl": -128.18
+      "market_value": 24353.35,
+      "unrealized_pl": -87.55
     }
   ],
   "signals": [],
@@ -53,13 +53,7 @@
   ],
   "protected": [],
   "skipped": [],
-  "findings": [
-    {
-      "severity": "info",
-      "agent": "watchdog",
-      "message": "the previous run (2026-09-09) ended with 1 error(s), since resolved: run attempted during market hours"
-    }
-  ],
+  "findings": [],
   "briefing": "Research is off. Add ANTHROPIC_API_KEY to your .env file to get a written briefing here.",
   "recent_trades": [],
   "errors": [],
