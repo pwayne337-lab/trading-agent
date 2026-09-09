@@ -12,7 +12,9 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: write      # to commit what it did back to the repo
+  pages: write         # to publish the rebuilt dashboard
+  id-token: write
 
 concurrency:
   # Never alongside the daily run. Both touch the same order book.
@@ -60,3 +62,26 @@ jobs:
             git pull --rebase --autostash || break
           done
           exit 1
+
+      # A push made with GITHUB_TOKEN does not trigger other workflows, so
+      # pages.yml never fires for the commit above and the dashboard would sit
+      # on the previous run's numbers until the next evening. daily.yml deploys
+      # from inside itself for the same reason; this has to as well.
+      - uses: actions/upload-pages-artifact@v3
+        if: always()
+        with:
+          path: site
+
+  publish:
+    needs: protect
+    if: always()
+    runs-on: ubuntu-latest
+    concurrency:
+      group: pages-deploy
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4
