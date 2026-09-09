@@ -1,11 +1,11 @@
 {
-  "updated_at": "2026-09-09T15:07:19+00:00",
+  "updated_at": "2026-09-09T15:14:38+00:00",
   "mode": "paper",
-  "healthy": false,
+  "healthy": true,
   "account": {
-    "equity": 99211.81,
+    "equity": 99190.93,
     "cash": 36523.97,
-    "buying_power": 321621.83,
+    "buying_power": 321563.37,
     "status": "ACTIVE",
     "pattern_day_trader": null,
     "trading_blocked": false,
@@ -16,22 +16,22 @@
       "symbol": "CL",
       "shares": 224,
       "avg_entry": 88.24,
-      "market_value": 19714.24,
-      "unrealized_pl": -51.52
+      "market_value": 19741.12,
+      "unrealized_pl": -24.64
     },
     {
       "symbol": "JCI",
       "shares": 128,
       "avg_entry": 146.42,
-      "market_value": 18567.04,
-      "unrealized_pl": -174.72
+      "market_value": 18612.48,
+      "unrealized_pl": -129.28
     },
     {
       "symbol": "QQQ",
       "shares": 34,
       "avg_entry": 718.85,
-      "market_value": 24406.56,
-      "unrealized_pl": -34.34
+      "market_value": 24312.72,
+      "unrealized_pl": -128.18
     }
   ],
   "signals": [],
@@ -51,49 +51,20 @@
       "unrealized_pl": 20.659998
     }
   ],
-  "protected": [
-    {
-      "symbol": "CL",
-      "shares": 224,
-      "stop": 84.64,
-      "target": 97.66,
-      "replaced_orphaned_target": true,
-      "status": "pending_new"
-    },
-    {
-      "symbol": "JCI",
-      "shares": 128,
-      "stop": 138.12,
-      "target": 160.48,
-      "replaced_orphaned_target": true,
-      "status": "pending_new"
-    }
-  ],
+  "protected": [],
   "skipped": [],
   "findings": [
     {
-      "severity": "critical",
-      "agent": "reconcile",
-      "message": "UNPROTECTED: no stop order behind CL, JCI. These positions have no exit working at the broker."
-    },
-    {
       "severity": "info",
       "agent": "watchdog",
-      "message": "the previous run (2026-09-08) ended with 4 error(s), since resolved: could not place a stop on CL: POST /v2/orders -> 403:..."
-    },
-    {
-      "severity": "info",
-      "agent": "reconcile",
-      "message": "closed since last run: DIA, KLAC"
+      "message": "the previous run (2026-09-09) ended with 1 error(s), since resolved: run attempted during market hours"
     }
   ],
   "briefing": "Research is off. Add ANTHROPIC_API_KEY to your .env file to get a written briefing here.",
   "recent_trades": [],
-  "errors": [
-    "run attempted during market hours"
-  ],
-  "carried_from": "2026-09-09T14:34:49+00:00",
-  "carried_reason": "the run was started while the market was open",
+  "errors": [],
+  "carried_from": null,
+  "carried_reason": "",
   "strategy_by_symbol": {
     "CL": "reversion",
     "JCI": "pullback"
@@ -102,5 +73,6 @@
     "llm_calls": 0,
     "llm_errors": 0,
     "enabled": false
-  }
+  },
+  "monitor_only": true
 }
