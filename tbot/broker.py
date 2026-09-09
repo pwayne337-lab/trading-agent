@@ -46,7 +46,15 @@ class AlpacaBroker:
                  base_url: Optional[str] = None, dry_run: bool = True):
         self.key = key or os.getenv("ALPACA_API_KEY", "")
         self.secret = secret or os.getenv("ALPACA_API_SECRET", "")
-        self.base_url = (base_url or os.getenv("ALPACA_BASE_URL", PAPER_URL)).rstrip("/")
+        # `or PAPER_URL` rather than getenv's default, because getenv only
+        # applies a default when the variable is ABSENT. GitHub Actions sets an
+        # env var to the empty string when the secret behind it does not exist,
+        # and "" is not the paper host, so is_live would read True, the
+        # live-trading lock would refuse the run, and _cmd_run would return
+        # before saving anything: a green build, an unchanged dashboard, and an
+        # agent that had silently stopped trading.
+        self.base_url = (base_url or os.getenv("ALPACA_BASE_URL")
+                         or PAPER_URL).rstrip("/")
         self.dry_run = dry_run
 
     # -- properties ---------------------------------------------------------
@@ -134,7 +142,20 @@ class AlpacaBroker:
         ]
 
     def open_orders(self) -> List[dict]:
-        return self._request("GET", "/v2/orders", params={"status": "open"})
+        """Every working order, not the first page of them.
+
+        Alpaca defaults this endpoint to 50 and allows up to 500. With the cap
+        at 15 positions, each filled one carrying two live bracket legs and
+        each pending entry carrying three orders, 50 is reachable -- and a
+        truncated list comes back as an ordinary 200, so it reads as fact. The
+        stops that got cut would look missing, protect_exposed would stack a
+        second stop behind a position that already had one, and whichever
+        filled second would open a naked short. Everything else in this run
+        goes out of its way to distinguish "none" from "unknown"; this call
+        used to quietly turn one into the other.
+        """
+        return self._request("GET", "/v2/orders",
+                             params={"status": "open", "limit": 500})
 
     def clock(self) -> dict:
         return self._request("GET", "/v2/clock")

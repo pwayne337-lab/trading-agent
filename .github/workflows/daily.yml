@@ -57,9 +57,23 @@ jobs:
         run: |
           git config user.name "trading-agent"
           git config user.email "actions@github.com"
-          git add state site
-          git diff --staged --quiet || git commit -m "run $(date -u +%Y-%m-%d)"
-          git push
+          # git add validates every pathspec before staging any of it, so if the
+          # run died before dashboard.py created site/, `git add state site`
+          # aborted and state/ was not committed either -- the step that
+          # guarantees a record was the one that lost it.
+          mkdir -p state site
+          git add -A state site
+          git diff --staged --quiet && exit 0
+          git commit -m "run $(date -u +%Y-%m-%d)"
+          # Anything landing on main between checkout and now makes this a
+          # non-fast-forward push. Failing there would discard the runner and
+          # with it today's state, equity row and run log -- after the orders
+          # had already gone in.
+          for i in 1 2 3; do
+            git push && exit 0
+            git pull --rebase --autostash || break
+          done
+          exit 1
 
       - uses: actions/upload-pages-artifact@v3
         if: always()
@@ -68,6 +82,12 @@ jobs:
 
   publish:
     needs: run
+    # `needs` alone requires success, so on a failed run this job was skipped
+    # and the failure page -- uploaded one step earlier precisely so the
+    # failure would be visible -- was never deployed. The live site kept
+    # serving yesterday, which is exactly the "a crash looks like a quiet day"
+    # outcome the upload step above exists to prevent.
+    if: always()
     runs-on: ubuntu-latest
     # Same group as the publish-the-site workflow: Pages takes one deployment
     # at a time, so the two queue instead of racing.

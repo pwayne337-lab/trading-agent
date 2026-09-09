@@ -1225,6 +1225,119 @@ check("comparison report renders", "<html" in _html and "log scale" in _html)
 check("report warns that the winner is partly luck", "luckiest" in _html)
 
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+print("\nThe broker adapter cannot mistake a partial answer for a whole one")
+# ---------------------------------------------------------------------------
+import os as _os
+
+from tbot import research as _research
+from tbot.broker import PAPER_URL, AlpacaBroker
+
+# GitHub Actions sets an env var to the empty string when the secret behind it
+# does not exist. os.getenv's default only applies when the name is ABSENT, so
+# an empty ALPACA_BASE_URL used to survive as "", which is not the paper host,
+# so is_live read True, the live-trading lock refused the run, and _cmd_run
+# returned before saving anything: a green build and an agent that had quietly
+# stopped trading.
+_prior = _os.environ.get("ALPACA_BASE_URL")
+try:
+    _os.environ["ALPACA_BASE_URL"] = ""
+    _b = AlpacaBroker()
+    check("an empty ALPACA_BASE_URL falls back to the paper endpoint",
+          _b.base_url == PAPER_URL.rstrip("/"), repr(_b.base_url))
+    check("and is therefore not treated as a live account", not _b.is_live)
+finally:
+    if _prior is None:
+        _os.environ.pop("ALPACA_BASE_URL", None)
+    else:
+        _os.environ["ALPACA_BASE_URL"] = _prior
+
+# Alpaca returns 50 orders by default and up to 500 on request. A truncated
+# order book arrives as an ordinary 200, so the stops it cut look missing and
+# the repair path stacks a second stop behind a position that already has one.
+_seen = {}
+_b = AlpacaBroker(key="k", secret="s", base_url=PAPER_URL)
+_b._request = lambda method, path, **kw: (_seen.update(kw.get("params") or {}), [])[1]
+_b.open_orders()
+check("open_orders asks for more than one page of orders",
+      int(_seen.get("limit", 0)) >= 500, str(_seen))
+
+
+# ---------------------------------------------------------------------------
+print("\nThe research screen fails closed when it cannot run")
+# ---------------------------------------------------------------------------
+# A lookup that threw and a stock that genuinely has no news are different
+# answers. Returning the same value for both let every trade pass a screen
+# that had never run.
+
+_orig_earnings = _research.next_earnings_date
+try:
+    _research.next_earnings_date = lambda symbol: _research.LOOKUP_FAILED
+    _v = _research.earnings_veto("TEST", 10)
+    check("an unreadable earnings calendar blocks the trade", _v.veto, _v.reason)
+    check("and says so rather than claiming there are no earnings",
+          _v.source == "unavailable", _v.source)
+
+    _research.next_earnings_date = lambda symbol: None
+    _v = _research.earnings_veto("TEST", 10)
+    check("a stock with no scheduled earnings is still allowed", not _v.veto,
+          _v.reason)
+finally:
+    _research.next_earnings_date = _orig_earnings
+
+# The sentinel is only worth anything if the lookups really produce it, so
+# break yfinance underneath them rather than stubbing the functions that
+# return it.
+import sys as _sys
+import types as _types
+
+_fake_yf = _types.ModuleType("yfinance")
+
+
+def _yahoo_is_down(*a, **kw):
+    raise RuntimeError("yahoo rate-limited this runner")
+
+
+_fake_yf.Ticker = _yahoo_is_down
+_saved_yf = _sys.modules.get("yfinance")
+try:
+    _sys.modules["yfinance"] = _fake_yf
+    check("a headline lookup that throws returns None, not an empty list",
+          _research.headlines("TEST") is None,
+          repr(_research.headlines("TEST")))
+    check("an earnings lookup that throws returns the failure sentinel",
+          _research.next_earnings_date("TEST") is _research.LOOKUP_FAILED,
+          repr(_research.next_earnings_date("TEST")))
+finally:
+    if _saved_yf is None:
+        _sys.modules.pop("yfinance", None)
+    else:
+        _sys.modules["yfinance"] = _saved_yf
+
+_r = _research.Researcher(api_key="fake", enabled=True)
+_v = _r.review_trade("TEST", 100.0, 98.0, 104.0, None)
+check("a failed headline lookup is reported as unavailable",
+      _v.source == "unavailable", _v.source)
+_v = _r.review_trade("TEST", 100.0, 98.0, 104.0, [])
+check("a stock with genuinely no headlines is not reported as unavailable",
+      _v.source == "llm", _v.source)
+
+# End to end: the fail-closed guard in screen() can now see the failure.
+_cfg = AgentConfig().research
+_orig_head = _research.headlines
+_orig_earnings = _research.next_earnings_date
+try:
+    _research.headlines = lambda symbol, limit=8, max_age_days=14: None
+    _research.next_earnings_date = lambda symbol: None
+    _v = _research.screen("TEST", 100.0, 98.0, 104.0,
+                          _research.Researcher(api_key="fake", enabled=True), _cfg)
+    check("screen() blocks a trade whose news could not be checked",
+          _v.veto, f"{_v.veto} {_v.reason}")
+finally:
+    _research.headlines = _orig_head
+    _research.next_earnings_date = _orig_earnings
+
+
 print("\n" + "=" * 60)
 if FAILURES:
     print(f"{len(FAILURES)} CHECK(S) FAILED:")

@@ -78,6 +78,12 @@ def _quiet():
         logging.getLogger(name).setLevel(logging.CRITICAL)
 
 
+# Returned when the lookup itself failed, which is not the same answer as
+# "this stock has no earnings scheduled". Collapsing the two made the highest
+# value filter in the system fail open on every Yahoo hiccup.
+LOOKUP_FAILED = object()
+
+
 def next_earnings_date(symbol: str) -> Optional[datetime]:
     """Next scheduled earnings date, or None if we cannot determine one."""
     if symbol.upper() in FUNDS:
@@ -116,7 +122,7 @@ def next_earnings_date(symbol: str) -> Optional[datetime]:
                     if dt > datetime.now(timezone.utc):
                         return dt
     except Exception:
-        return None
+        return LOOKUP_FAILED
     return None
 
 
@@ -129,6 +135,13 @@ def earnings_veto(symbol: str, within_days: int = 10) -> Verdict:
     the whole system and it needs no AI at all.
     """
     d = next_earnings_date(symbol)
+    if d is LOOKUP_FAILED:
+        # Unknown is not "none scheduled". Holding a swing trade through an
+        # earnings report is the one overnight gap the position sizing assumes
+        # cannot happen, so an unreadable calendar blocks the trade instead of
+        # waving it through. Visible as a veto on the dashboard, not silent.
+        return Verdict(True, "earnings date could not be checked", ["no-earnings-data"],
+                       "unavailable")
     if d is None:
         return Verdict(False, "no earnings date found", [], "earnings")
 
@@ -143,8 +156,14 @@ def earnings_veto(symbol: str, within_days: int = 10) -> Verdict:
     return Verdict(False, f"next earnings {d.date()}, {days} days out", [], "earnings")
 
 
-def headlines(symbol: str, limit: int = 8, max_age_days: int = 14) -> List[dict]:
-    """Recent news headlines. Titles and dates only, no article bodies."""
+def headlines(symbol: str, limit: int = 8,
+              max_age_days: int = 14) -> Optional[List[dict]]:
+    """Recent news headlines. Titles and dates only, no article bodies.
+
+    Returns None when the lookup failed and [] when the stock really had no
+    recent news. They are different answers and the caller acts on them
+    differently, so they must not share a return value.
+    """
     out = []
     try:
         import yfinance as yf
@@ -174,7 +193,7 @@ def headlines(symbol: str, limit: int = 8, max_age_days: int = 14) -> List[dict]
             if len(out) >= limit:
                 break
     except Exception:
-        return []
+        return None
     return out
 
 
@@ -244,7 +263,15 @@ Reply with JSON only, no other text:
         is no code path anywhere that lets it create or enlarge a position.
         """
         if not self.enabled:
-            return Verdict(False, "research disabled", [], "none", len(news))
+            return Verdict(False, "research disabled", [], "none", len(news or []))
+
+        # None means the lookup failed; [] means the stock genuinely had no
+        # recent news. Returning [] for both made every trade pass a screen
+        # that had never run, with source "llm" so the fail-closed guard in
+        # screen() could not see it.
+        if news is None:
+            return Verdict(False, "headline lookup failed", ["error"],
+                           "unavailable", 0)
 
         if not news:
             return Verdict(False, "no recent headlines found", [], "llm", 0)
@@ -332,7 +359,11 @@ def screen(symbol: str, entry: float, stop: float, target: float,
     """
     if cfg_research.check_earnings:
         v = earnings_veto(symbol, cfg_research.earnings_blackout_days)
-        if v.veto:
+        if v.veto and not (v.source == "unavailable"
+                           and not cfg_research.require_research):
+            # An unreadable calendar blocks the trade under the same switch the
+            # LLM screen uses. Set require_research False and the agent takes
+            # the trade without knowing whether earnings are two days out.
             return v
 
     if not cfg_research.use_llm:

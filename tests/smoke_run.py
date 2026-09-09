@@ -178,7 +178,13 @@ def build_bars():
             "FLAT": _end_today(make_series(n=500, seed=12, drift=0.0, vol=0.006))}
 
 
-def run(positions, orders, submit=True, broker=None, previous=None):
+# Every symbol the run asked load_universe for, so a test can prove a held
+# position was included and not just that the run did not crash without it.
+REQUESTED = []
+
+
+def run(positions, orders, submit=True, broker=None, previous=None,
+        equity_csv=None):
     """`previous` is a snapshot left on disk by an earlier run, as cmd_run
     would find it. It is written straight to the file rather than through
     save_state, which restamps updated_at and would leave nothing exact to
@@ -188,7 +194,14 @@ def run(positions, orders, submit=True, broker=None, previous=None):
         broker = FakeBroker(positions, orders, dry_run=not submit)
 
     agent_mod.AlpacaBroker = lambda **kw: broker
-    datamod.load_universe = lambda syms, start=None, end=None, refresh=False: bars
+
+    REQUESTED.clear()
+
+    def _load(syms, start=None, end=None, refresh=False):
+        REQUESTED.extend(syms)
+        return bars
+
+    datamod.load_universe = _load
 
     tmp = Path(tempfile.mkdtemp())
     state_mod.STATE_DIR = tmp
@@ -199,6 +212,9 @@ def run(positions, orders, submit=True, broker=None, previous=None):
     if previous is not None:
         state_mod.STATE_FILE.write_text(
             json.dumps(previous, indent=2, default=str))
+
+    if equity_csv is not None:
+        state_mod.EQUITY_FILE.write_text(equity_csv)
 
     # Send the generated page somewhere disposable. Without this the test
     # overwrites the real site/index.html with invented numbers, and the next
@@ -225,7 +241,14 @@ def run_monitor(positions, orders, submit=True, broker=None, seed_state=None):
         broker = FakeBroker(positions, orders, dry_run=not submit)
 
     agent_mod.AlpacaBroker = lambda **kw: broker
-    datamod.load_universe = lambda syms, start=None, end=None, refresh=False: bars
+
+    REQUESTED.clear()
+
+    def _load(syms, start=None, end=None, refresh=False):
+        REQUESTED.extend(syms)
+        return bars
+
+    datamod.load_universe = _load
 
     tmp = Path(tempfile.mkdtemp())
     state_mod.STATE_DIR = tmp
@@ -833,6 +856,83 @@ check("the watchdog survives a long history",
       isinstance(watch.check_run_health(
           _recent, [{"date": d.strftime("%Y-%m-%d"), "equity": 100000.0}
                     for d in pd.bdate_range("2025-01-01", periods=400)]), list))
+
+# ---------------------------------------------------------------------------
+print("\nG. The run downloads what it holds, not only what it watches")
+# ---------------------------------------------------------------------------
+# A held position that has dropped off the watchlist still needs bars. Without
+# them the exit loop skips it ("if df is None: continue"), protect_exposed
+# cannot price a stop for it, and check_positions_have_data raises a critical
+# that empties the candidate list -- so one edit to the watchlist orphans a
+# live position and stops the agent trading anything else as well.
+
+_orphan = [{"symbol": "ORPHAN", "shares": 5, "avg_entry": 50.0,
+            "market_value": 250.0, "unrealized_pl": 0.0}]
+b, st = run(positions=_orphan, orders=[])
+check("a held symbol that is not on the watchlist is still downloaded",
+      "ORPHAN" in REQUESTED, str(sorted(set(REQUESTED))))
+check("and the watchlist is still downloaded alongside it",
+      "UP" in REQUESTED, str(sorted(set(REQUESTED))))
+
+
+# ---------------------------------------------------------------------------
+print("\nH. The drawdown breaker halts at the configured depth")
+# ---------------------------------------------------------------------------
+# DrawdownMonitor's first argument is the starting high water mark, not the
+# limit. Passing the limit there shifted every argument one place, so the
+# breaker halted at 10% instead of the configured 20% and resume_below
+# collapsed onto the same number, losing the hysteresis as well.
+
+_hdr = "date,equity,cash,positions\n"
+# A peak of 113,636 against the fake account's 100,000 is a 12% drawdown:
+# deeper than the 10% the shifted arguments produced, shallower than 20%.
+b, st = run(positions=[], orders=[],
+            equity_csv=_hdr + "2026-08-03,113636.36,113636.36,0\n")
+check("a 12% drawdown does not halt a breaker configured for 20%",
+      not any("drawdown halt" in e for e in st["errors"]), str(st["errors"]))
+check("and the run still takes trades at a 12% drawdown",
+      bool(b.submitted), str(b.submitted))
+
+b, st = run(positions=[], orders=[],
+            equity_csv=_hdr + "2026-08-03,130000.00,130000.00,0\n")
+check("a 23% drawdown does halt it",
+      any("drawdown halt" in e for e in st["errors"]), str(st["errors"]))
+check("and nothing is bought while it is halted", b.submitted == [],
+      str(b.submitted))
+
+
+# ---------------------------------------------------------------------------
+print("\nI. A crash after an order keeps the record of which strategy sent it")
+# ---------------------------------------------------------------------------
+# The exits differ per strategy, so losing this map means a mean reversion
+# trade gets managed by the trend exit and closed the next day at a loss. The
+# crash handler saves _LIVE_STATE, so the map has to live there rather than in
+# a local copy that is only written back at the end of a clean run.
+
+class LateCrashBroker(FakeBroker):
+    """Fails after the orders are in, before the run finishes writing."""
+    def realized_trades(self, limit=20):
+        raise RuntimeError("the history endpoint fell over")
+
+
+_crashed = False
+try:
+    b, st = run(positions=[], orders=[], broker=LateCrashBroker([], []))
+except RuntimeError:
+    _crashed = True
+    st = state_mod.load_state()
+
+check("the late crash really happened", _crashed)
+check("the run that crashed still recorded its own orders",
+      bool(st.get("orders")), str(st.get("orders")))
+check("and the strategy that opened each one survived the crash",
+      bool(st.get("strategy_by_symbol")), str(st.get("strategy_by_symbol")))
+check("every order it sent is in the strategy map",
+      all(o["symbol"] in (st.get("strategy_by_symbol") or {})
+          for o in st.get("orders") or []),
+      f"orders={[o['symbol'] for o in st.get('orders') or []]} "
+      f"map={st.get('strategy_by_symbol')}")
+
 
 print("\n" + "=" * 60)
 if FAILURES:

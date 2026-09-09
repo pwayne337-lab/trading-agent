@@ -19,6 +19,7 @@ import argparse
 import copy
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -175,6 +176,15 @@ def cmd_run(args):
                 f"the run failed partway through: {type(exc).__name__}: {exc}")
             st["healthy"] = False
             try:
+                # Same reason as the early returns. save_state replaces the file
+                # wholesale, so a crash before the account was read publishes
+                # blank_state's defaults -- $0.00 equity, no positions -- and the
+                # page reads like a wiped-out account rather than a failed run.
+                # The file on disk still holds the last completed run.
+                if not st.get("account"):
+                    _carry_display(st, state.load_state(),
+                                   f"the run failed partway through "
+                                   f"({type(exc).__name__})")
                 state.save_state(st)
                 write_dashboard()
             except Exception:
@@ -460,8 +470,14 @@ def _cmd_run(args):
     # the session reports and stops.
     try:
         market_open = bool(broker.clock().get("is_open"))
-    except (BrokerError, AttributeError):
-        market_open = False        # cannot tell, so do not block the run
+    except (BrokerError, AttributeError) as exc:
+        # The account and the positions were read successfully seconds ago, so
+        # a failure here is the clock endpoint specifically. Assuming "closed"
+        # let the run set entries, stops, targets and every trend-break exit
+        # from a daily bar that is still moving. Unknown is not closed, and a
+        # missed day costs nothing but opportunity.
+        st["errors"].append(f"could not read the market clock: {exc}")
+        market_open = True
     if market_open and not getattr(args, "ignore_session", False):
         print("The market is open, so today's bar is not finished yet.\n"
               "This agent trades on completed daily bars. Run it after the "
@@ -535,7 +551,16 @@ def _cmd_run(args):
         print("No ANTHROPIC_API_KEY found, so news review is off. "
               "The earnings filter still runs.\n")
 
-    bars = datamod.load_universe(cfg.watchlist, start=args.start, refresh=True)
+    # Held positions have to be in here even when they are no longer on the
+    # watchlist. Without their bars the exit loop below skips them silently
+    # ("if df is None: continue"), protect_exposed cannot price a stop for them,
+    # and check_positions_have_data raises a critical that empties the candidate
+    # list -- so deleting one delisted name from the watchlist orphans a live
+    # position AND stops the agent trading anything else. cmd_monitor already
+    # loads what is held; this is the path that did not.
+    bars = datamod.load_universe(
+        sorted(set(cfg.watchlist) | {p["symbol"] for p in positions}),
+        start=args.start, refresh=True)
 
     # --- the watchers, before any decision is made on this data -------------
     previous = _prev
@@ -545,9 +570,23 @@ def _cmd_run(args):
     # The drawdown circuit breaker. It existed in config, in risk.py and in the
     # backtest, and was the one risk control the live run never consulted, so a
     # 30% drawdown would have kept opening full-size positions all the way down.
-    dd = DrawdownMonitor(cfg.risk.max_drawdown_halt, cfg.risk.resume_below,
-                         cfg.risk.halt_cooldown_days)
+    # The first argument is the starting high water mark, not the limit. Passing
+    # the limit there shifted every argument one slot left, so the breaker read
+    # limit=0.10 and resume_below=min(60, 0.10)=0.10: it halted at a 10%
+    # drawdown instead of the configured 20%, and the hysteresis that keeps it
+    # from flip-flopping on the boundary was gone because the two thresholds had
+    # collapsed onto each other. peak is max(peak, equity) on every update, so
+    # seeding it at 0 and replaying the history below rebuilds the true peak.
+    dd = DrawdownMonitor(0.0, cfg.risk.max_drawdown_halt,
+                         cfg.risk.resume_below, cfg.risk.halt_cooldown_days)
+    # append_equity replaces today's row rather than appending a second one, so
+    # on a re-run today is already in this history. Replaying it and then
+    # calling update(equity) again feeds the same day twice, which inflates
+    # days_tripped and lets the cooldown expire early.
+    _today = datetime.now(timezone.utc).date().isoformat()
     for row in prior_equity:
+        if str(row.get("date", ""))[:10] == _today:
+            continue
         try:
             dd.update(float(row["equity"]))
         except (KeyError, TypeError, ValueError):
@@ -613,7 +652,13 @@ def _cmd_run(args):
     # Which strategy opened each position, carried forward from the last run.
     # Anything unknown is managed by the pullback exits, which is the oldest
     # and most conservative set, and is noted rather than assumed silently.
-    strat_map = dict(st.get("strategy_by_symbol") or {})
+    # An alias, not a copy. st["strategy_by_symbol"] is already a fresh dict
+    # built at the top of this run, and the crash handler saves _LIVE_STATE --
+    # which is this same st. As a copy, a run that submitted a reversion order
+    # and then died anywhere before the prune at the end lost the record of
+    # which strategy opened it, and tomorrow the pullback exits would close it
+    # on its first evaluation, at a loss, for no visible reason.
+    strat_map = st["strategy_by_symbol"]
 
     closed_today = set()
     entry_dates = broker.entry_dates() if positions else {}
@@ -749,7 +794,14 @@ def _cmd_run(args):
             continue
         print(f"  {sym}: [{sig.strategy}] {fill.status} {fill.detail or ''} "
               f"({order.shares} sh, risking ${order.dollars_at_risk:,.2f})")
+        # The caps move for every candidate this run commits to, filled or not.
+        # Advancing them only on a real submission meant a dry run sized all of
+        # them against the opening position count and exposure, so
+        # `python agent.py run` printed a plan of twenty entries that a
+        # --submit run would never take.
         committed.add(sym)
+        open_count += 1
+        gross += order.notional
         if fill.submitted:
             st["orders"].append({"symbol": sym, "shares": order.shares,
                                  "stop": order.stop, "target": order.target,
@@ -757,8 +809,6 @@ def _cmd_run(args):
                                  "order_id": fill.order_id,
                                  "strategy": sig.strategy})
             strat_map[sym] = sig.strategy
-            open_count += 1
-            gross += order.notional
 
     if not (st["orders"] or st["signals"] or st["vetoes"]):
         print("  No setups met the rules today.")
@@ -768,10 +818,14 @@ def _cmd_run(args):
     except BrokerError as exc:
         st["errors"].append(f"could not read trade history: {exc}")
 
+    # Against the last DIFFERENT day. On a second run of the same day
+    # history[-1] is this morning's own row, so the briefing was told the
+    # account was flat at +0.00% whatever it had actually done.
     history = state.load_equity_history()
     day_change = 0.0
-    if history and history[-1]["equity"] > 0:
-        day_change = (equity / history[-1]["equity"] - 1) * 100
+    _prior = [h for h in history if str(h.get("date", ""))[:10] != _today]
+    if _prior and _prior[-1]["equity"] > 0:
+        day_change = (equity / _prior[-1]["equity"] - 1) * 100
 
     if cfg.research.write_briefing:
         st["briefing"] = researcher.daily_briefing(
