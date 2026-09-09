@@ -1001,6 +1001,52 @@ def cmd_status(args):
         print(f"  {p['symbol']:6s} {p['shares']:>5} sh @ ${p['avg_entry']:,.2f}  "
               f"value ${p['market_value']:,.2f}  P&L ${p['unrealized_pl']:+,.2f}")
 
+    # The order book, in the terms that decide whether a position is protected.
+    # "UNPROTECTED: no stop order behind X" says what the agent concluded but
+    # not what it saw, and those are different questions when the conclusion is
+    # wrong. Only a stop counts, so a symbol can be reserved down to zero
+    # available shares -- which is what makes a repair stop bounce with a 403
+    # insufficient-qty -- while still having nothing that would actually exit.
+    try:
+        orders = broker.open_orders()
+    except BrokerError as exc:
+        print(f"\nCannot read the order book: {exc}")
+        return
+
+    flat = watch._flatten_orders(orders)
+    stop_qty, sells = watch._stop_coverage(orders)
+    exposed = watch.unprotected(pos, orders)
+
+    print(f"\n{len(flat)} working order(s) at the broker:")
+    if not flat:
+        print("  none")
+    for o in sorted(flat, key=lambda x: (str(x.get('symbol')), str(x.get('id')))):
+        counts = ("STOP" if o.get("stop_price") not in (None, "")
+                  and str(o.get("side", "")).startswith("sell") else "not a stop")
+        print(f"  {str(o.get('symbol')):6s} {str(o.get('side')):5s} "
+              f"{str(o.get('type') or o.get('order_type')):11s} "
+              f"qty {str(o.get('qty')):>6s}  "
+              f"stop {str(o.get('stop_price') or '-'):>9s}  "
+              f"limit {str(o.get('limit_price') or '-'):>9s}  "
+              f"{str(o.get('status')):16s} {counts}")
+
+    print("\nProtection, per position:")
+    for p in pos:
+        sym = p["symbol"]
+        gap = exposed.get(sym, 0)
+        verdict = (f"EXPOSED {gap} of {p['shares']} sh" if gap
+                   else f"covered ({stop_qty.get(sym, 0)} sh under a stop)")
+        print(f"  {sym:6s} {verdict}   "
+              f"[{sells.get(sym, 0)} sell order(s) seen on this symbol]")
+
+    if exposed:
+        print("\nA symbol shown here with 0 sell orders seen, that the broker "
+              "still refuses a stop on for insufficient quantity, means the "
+              "shares are reserved by an order this list did not return -- the "
+              "position is protected and the alarm is wrong. A symbol with 1 "
+              "sell order that is 'not a stop' means the take-profit leg "
+              "outlived its stop, and the position really is exposed.")
+
 
 def cmd_cache(args):
     df = datamod.cache_status()

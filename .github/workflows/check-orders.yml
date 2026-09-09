@@ -1,0 +1,33 @@
+# Read-only. Prints the account, the positions, and every working order at the
+# broker, so "UNPROTECTED: no stop order behind X" can be checked against what
+# the broker actually holds. It places no orders and cancels none.
+#
+# Run it from the Actions tab: "Check my orders" -> Run workflow.
+name: Check my orders
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  status:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Show the account and the order book
+        env:
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_API_SECRET: ${{ secrets.ALPACA_API_SECRET }}
+          ALPACA_BASE_URL: ${{ secrets.ALPACA_BASE_URL }}
+        run: python agent.py status
