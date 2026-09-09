@@ -19,6 +19,7 @@ import argparse
 import copy
 import os
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -313,7 +314,7 @@ def cmd_monitor(args):
     # The watchers judged a picture this run has since changed.
     if repaired:
         try:
-            orders_open = broker.open_orders()
+            orders_open = settled_orders(broker, positions, repaired, st)
         except BrokerError as exc:
             st["errors"].append(f"could not re-read orders after protecting: {exc}")
         else:
@@ -327,6 +328,48 @@ def cmd_monitor(args):
     state.save_state(st)
     write_dashboard()
     print("Monitoring check complete. No entries or exits were considered.")
+
+
+def settled_orders(broker, positions, repaired, st, attempts=6, pause=2.0):
+    """Re-read the order book until the stops just placed show up in it.
+
+    A repair is judged by re-reading the broker, and an order accepted
+    milliseconds ago comes back `pending_new` and can be missing from the very
+    next list. Judging on that first read reports a position as unprotected
+    immediately after successfully protecting it -- which in the daily run
+    empties the candidate list and stops the agent trading for the rest of the
+    session, on the strength of a repair that worked.
+
+    So it waits for the picture to agree with what the broker accepted, and
+    gives up after a bounded wait rather than looping. Giving up keeps the
+    critical finding: if the stop never appears, saying so is right.
+    """
+    orders = broker.open_orders()
+    if not repaired:
+        return orders
+    want = set(repaired)
+    for attempt in range(attempts):
+        if not (set(watch.unprotected(positions, orders)) & want):
+            if attempt:
+                print(f"  the order book caught up after "
+                      f"{attempt * pause:.0f}s")
+            return orders
+        if attempt == attempts - 1:
+            break
+        time.sleep(pause)
+        try:
+            orders = broker.open_orders()
+        except BrokerError as exc:
+            st["errors"].append(f"could not re-read orders while waiting for "
+                                f"the new stops to appear: {exc}")
+            return orders
+    still = sorted(set(watch.unprotected(positions, orders)) & want)
+    if still:
+        st["errors"].append(
+            f"the broker accepted stops on {', '.join(still)} but they are "
+            f"still not in the order book after "
+            f"{(attempts - 1) * pause:.0f}s")
+    return orders
 
 
 def protect_exposed(broker, cfg, bars, positions, orders_open, st,
@@ -682,7 +725,7 @@ def _cmd_run(args):
     # it fixed itself two seconds earlier, and it would do that every run.
     if repaired:
         try:
-            orders_open = broker.open_orders()
+            orders_open = settled_orders(broker, positions, repaired, st)
         except BrokerError as exc:
             st["errors"].append(f"could not re-read orders after protecting: {exc}")
         else:

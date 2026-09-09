@@ -153,9 +153,19 @@ class AlpacaBroker:
         filled second would open a naked short. Everything else in this run
         goes out of its way to distinguish "none" from "unknown"; this call
         used to quietly turn one into the other.
+
+        nested=true rolls a bracket's or an OCO's legs up under the parent
+        rather than leaving whether they appear at all to the endpoint's
+        default. The stop of an OCO is a leg: the parent is a sell limit
+        carrying the take-profit price and no stop price of its own, so a
+        parent-only view of a properly protected position reads as an
+        unprotected one. _flatten_orders exists for exactly this shape and
+        dedupes by order id, so asking for the legs can only make protection
+        more visible, never less.
         """
         return self._request("GET", "/v2/orders",
-                             params={"status": "open", "limit": 500})
+                             params={"status": "open", "limit": 500,
+                                     "nested": "true"})
 
     def clock(self) -> dict:
         return self._request("GET", "/v2/clock")

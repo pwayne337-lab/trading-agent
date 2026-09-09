@@ -1262,6 +1262,25 @@ _b.open_orders()
 check("open_orders asks for more than one page of orders",
       int(_seen.get("limit", 0)) >= 500, str(_seen))
 
+# An OCO's stop lives in the parent's legs: the parent itself is a sell limit
+# carrying the take-profit price and no stop price at all. Reading parents only
+# makes a properly protected position look bare.
+check("open_orders asks for the nested legs too",
+      str(_seen.get("nested", "")).lower() in ("true", "1"), str(_seen))
+
+_legged = [{"symbol": "CL", "side": "sell", "type": "limit", "qty": "224",
+            "limit_price": "97.66", "status": "new", "id": "parent",
+            "legs": [{"symbol": "CL", "side": "sell", "type": "stop",
+                      "qty": "224", "stop_price": "84.64", "status": "new",
+                      "id": "leg-stop"}]}]
+from tbot import watch as _watch
+check("a stop nested inside an OCO parent counts as protection",
+      not _watch.unprotected([{"symbol": "CL", "shares": 224}], _legged),
+      str(_watch.unprotected([{"symbol": "CL", "shares": 224}], _legged)))
+check("and the parent limit alone is not mistaken for one",
+      _watch.unprotected([{"symbol": "CL", "shares": 224}],
+                         [dict(_legged[0], legs=[])]) == {"CL": 224})
+
 
 # ---------------------------------------------------------------------------
 print("\nThe research screen fails closed when it cannot run")

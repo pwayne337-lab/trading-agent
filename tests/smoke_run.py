@@ -1050,6 +1050,79 @@ check("and no second stop is stacked behind it", not b.protected,
       str(b.protected))
 
 
+# ---------------------------------------------------------------------------
+print("\nK. A repair is not re-judged before the broker has caught up")
+# ---------------------------------------------------------------------------
+# Seen live on 2026-09-09: the monitor placed OCO stops on CL and JCI, the
+# broker accepted both, and the re-read a moment later still showed them
+# unprotected because the orders were pending_new and not in the list yet. In
+# the daily run that same stale read empties the candidate list, so a repair
+# that worked stops the agent trading for the session.
+
+class SlowBookBroker(FakeBroker):
+    """Accepts the stop, then takes two reads to admit it exists."""
+    def __init__(self, *a, **kw):
+        super().__init__(*a, **kw)
+        self._lag = 2
+        self._pending = []
+
+    def open_orders(self):
+        if self._lag > 0 and self._pending:
+            self._lag -= 1
+            if self._lag == 0:
+                self._orders.extend(self._pending)
+                self._pending = []
+        return list(self._orders)
+
+    def submit_protective_oco(self, symbol, shares, stop, target,
+                              allow_live=False, acknowledged=False,
+                              last_price=None):
+        self._refuse_if_reserved(symbol, shares)
+        self.protected.append({"symbol": symbol, "shares": shares,
+                               "stop": stop, "target": target})
+        # Accepted, but not visible in the order book for another two reads.
+        self._pending.append({"symbol": symbol, "side": "sell",
+                              "id": "oco-" + symbol, "qty": str(shares),
+                              "stop_price": str(stop), "status": "new"})
+        return Fill(symbol, shares, "id", "pending_new", True)
+
+
+_bare2 = [{"symbol": "UP", "shares": 20, "avg_entry": 100.0,
+           "market_value": 2000.0, "unrealized_pl": 0.0}]
+_orphan2 = [{"symbol": "UP", "side": "sell", "type": "limit", "qty": "20",
+             "limit_price": "999999", "status": "new", "id": "orphan-3"}]
+
+_slow = SlowBookBroker(list(_bare2), list(_orphan2))
+agent_mod.time = type("_t", (), {"sleep": staticmethod(lambda s: None)})()
+b, st = run(positions=list(_bare2), orders=list(_orphan2), broker=_slow)
+
+check("the slow broker did accept the stop", bool(b.protected), str(b.protected))
+check("the run waits for the order book instead of trusting the first read",
+      not any("UNPROTECTED" in (f.get("message") or "")
+              for f in st.get("findings") or []),
+      str([f.get("message") for f in st.get("findings") or []]))
+check("and does not record a false failure while waiting",
+      not any("still not in the order book" in e for e in st.get("errors") or []),
+      str(st.get("errors")))
+
+
+class NeverAppearsBroker(SlowBookBroker):
+    """Accepts the stop and never shows it. The alarm must stand."""
+    def open_orders(self):
+        return list(self._orders)
+
+
+_never = NeverAppearsBroker(list(_bare2), list(_orphan2))
+b, st = run(positions=list(_bare2), orders=list(_orphan2), broker=_never)
+check("a stop that never appears is still reported, not waited away",
+      any("still not in the order book" in e for e in st.get("errors") or []),
+      str(st.get("errors")))
+check("and the position is still called unprotected",
+      any("UNPROTECTED" in (f.get("message") or "")
+          for f in st.get("findings") or []),
+      str([f.get("message") for f in st.get("findings") or []]))
+
+
 print("\n" + "=" * 60)
 if FAILURES:
     print(f"{len(FAILURES)} SMOKE CHECK(S) FAILED:")
