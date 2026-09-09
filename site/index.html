@@ -99,9 +99,9 @@
 
   <nav class="sitenav"><a href="./floor.html">How a run works &rarr;</a></nav>
 
-  <div id="banners"><div class="banner info"><strong>Mid-session check.</strong> Positions, orders and the safety checks below were refreshed just now. Any signals and orders shown are from the last after-close run; this check does not trade.</div><div class="banner critical"><strong>Needs attention.</strong> UNPROTECTED: no stop order behind CL, JCI. These positions have no exit working at the broker.</div></div>
+  <div id="banners"><div class="banner warning"><strong>Carried forward.</strong> The last run stopped before it read the account, because the run was started while the market was open. Every figure below is from the run of 2026-09-09T14:34:49+00:00 UTC and has not been re-measured since. Nothing about the account has changed; only this page is waiting on a clean run.</div><div class="banner critical"><strong>Needs attention.</strong> UNPROTECTED: no stop order behind CL, JCI. These positions have no exit working at the broker.</div></div>
 
-  <div class="tiles"><div class="tile "><div class="tl">Account equity</div><div class="tv">$99,211.81</div><div class="ts">paper account &middot; 4 run(s) recorded</div></div><div class="tile bad"><div class="tl">Today</div><div class="tv">-0.27%</div><div class="ts">since the previous run</div></div><div class="tile bad"><div class="tl">Since start</div><div class="tv">-0.79%</div><div class="ts">of tracking</div></div><div class="tile bad"><div class="tl">Open positions</div><div class="tv">3</div><div class="ts">open P&amp;L $-260.58</div></div><div class="tile "><div class="tl">Cash</div><div class="tv">$36,523.97</div><div class="ts">uninvested</div></div><div class="tile good" id="age-tile"><div class="tl">Last run</div><div class="tv" id="age-val">0 min ago</div><div class="ts">0 order(s), 0 blocked</div></div></div>
+  <div class="tiles"><div class="tile "><div class="tl">Account equity</div><div class="tv">$99,211.81</div><div class="ts">paper account &middot; 4 run(s) recorded</div></div><div class="tile bad"><div class="tl">Today</div><div class="tv">-0.27%</div><div class="ts">since the previous run</div></div><div class="tile bad"><div class="tl">Since start</div><div class="tv">-0.79%</div><div class="ts">of tracking</div></div><div class="tile bad"><div class="tl">Open positions</div><div class="tv">3</div><div class="ts">open P&amp;L $-260.58</div></div><div class="tile "><div class="tl">Cash</div><div class="tv">$36,523.97</div><div class="ts">uninvested</div></div><div class="tile good" id="age-tile"><div class="tl">Last run</div><div class="tv" id="age-val">32 min ago</div><div class="ts">0 order(s), 0 blocked</div></div></div>
 
   <h2>Account equity</h2>
   <div class="card" id="c1"><svg viewBox="0 0 920 280" class="chart" role="img" preserveAspectRatio="none">
@@ -129,7 +129,7 @@
   <div class="card empty">No closed trades yet.</div>
 
   <footer>
-    Generated 2026-09-09T14:34:49+00:00 UTC from the agent's own run records.
+    Generated 2026-09-09T15:07:19+00:00 UTC from the agent's own run records, carrying the figures from the run of 2026-09-09T14:34:49+00:00 UTC.
     Numbers update only when the agent runs; this page does not poll anything.<br>
     A paper account is fake money. Results here are not a prediction of what
     real money would do, and past results do not tell you what comes next.
@@ -152,7 +152,7 @@
       cache.
 --------------------------------------------------------------------------- */
 (function () {
-  var BUILT = "2026-09-09T14:34:49+00:00";
+  var BUILT = "2026-09-09T15:07:19+00:00";
   var DATED = "2026-09-09T14:34:49+00:00";
 
   function ageParts(iso) {

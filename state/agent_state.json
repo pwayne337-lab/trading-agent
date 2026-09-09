@@ -1,7 +1,7 @@
 {
-  "updated_at": "2026-09-09T14:34:49+00:00",
+  "updated_at": "2026-09-09T15:07:19+00:00",
   "mode": "paper",
-  "healthy": true,
+  "healthy": false,
   "account": {
     "equity": 99211.81,
     "cash": 36523.97,
@@ -89,9 +89,11 @@
   ],
   "briefing": "Research is off. Add ANTHROPIC_API_KEY to your .env file to get a written briefing here.",
   "recent_trades": [],
-  "errors": [],
-  "carried_from": null,
-  "carried_reason": "",
+  "errors": [
+    "run attempted during market hours"
+  ],
+  "carried_from": "2026-09-09T14:34:49+00:00",
+  "carried_reason": "the run was started while the market was open",
   "strategy_by_symbol": {
     "CL": "reversion",
     "JCI": "pullback"
@@ -100,6 +102,5 @@
     "llm_calls": 0,
     "llm_errors": 0,
     "enabled": false
-  },
-  "monitor_only": true
+  }
 }
