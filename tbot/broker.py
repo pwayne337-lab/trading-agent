@@ -41,6 +41,13 @@ class Fill:
     detail: str = ""
 
 
+# Statuses an order can carry while it is still capable of executing. Kept in
+# step with watch.WORKING_STATUSES on purpose rather than imported: the adapter
+# must not depend on the watchers, and both are describing one broker fact.
+WORKING_STATUSES = ("new", "accepted", "held", "partially_filled", "pending_new",
+                    "accepted_for_bidding", "calculated", "")
+
+
 class AlpacaBroker:
     def __init__(self, key: Optional[str] = None, secret: Optional[str] = None,
                  base_url: Optional[str] = None, dry_run: bool = True):
@@ -154,18 +161,58 @@ class AlpacaBroker:
         goes out of its way to distinguish "none" from "unknown"; this call
         used to quietly turn one into the other.
 
-        nested=true rolls a bracket's or an OCO's legs up under the parent
-        rather than leaving whether they appear at all to the endpoint's
-        default. The stop of an OCO is a leg: the parent is a sell limit
-        carrying the take-profit price and no stop price of its own, so a
-        parent-only view of a properly protected position reads as an
-        unprotected one. _flatten_orders exists for exactly this shape and
-        dedupes by order id, so asking for the legs can only make protection
-        more visible, never less.
+        status=all, filtered here, rather than status=open. A bracket's legs
+        stay children of the entry order, and once that entry fills the parent
+        is no longer open -- so status=open drops the whole group, taking the
+        working stop leg with it. The take-profit survives that filter because
+        it is live on the exchange in its own right, which is why a fully
+        protected bracket read as a naked position with an orphaned target.
+        Every alarm about CL, JCI, ABNB, ABT, ADP and AMZN came from here.
+
+        So ask for everything recent and decide what is working locally, using
+        the same allowlist the watchers use. nested=true keeps the legs
+        attached to their parents and _flatten_orders pulls them back out;
+        dedupe is by order id, so a leg arriving both nested and top-level
+        counts once.
         """
-        return self._request("GET", "/v2/orders",
-                             params={"status": "open", "limit": 500,
-                                     "nested": "true"})
+        out, cutoff = [], None
+        seen = set()
+        for _ in range(4):        # 2000 orders is far more than a day produces
+            params = {"status": "all", "limit": 500, "direction": "desc",
+                      "nested": "true"}
+            if cutoff:
+                params["until"] = cutoff
+            page = self._request("GET", "/v2/orders", params=params)
+            if not isinstance(page, list) or not page:
+                break
+            for o in page:
+                oid = o.get("id")
+                if oid and oid in seen:
+                    continue
+                if oid:
+                    seen.add(oid)
+                out.append(o)
+            if len(page) < 500:
+                break
+            cutoff = page[-1].get("submitted_at")
+            if not cutoff:
+                break
+
+        def working(o):
+            return str(o.get("status") or "").lower() in WORKING_STATUSES
+
+        # Keep a closed parent whose legs are still working, so the flattening
+        # downstream can still reach them. A closed order with nothing live
+        # under it is dropped.
+        kept = []
+        for o in out:
+            legs = [l for l in (o.get("legs") or []) if isinstance(l, dict)]
+            live_legs = [l for l in legs if working(l)]
+            if working(o):
+                kept.append(o)
+            elif live_legs:
+                kept.append(dict(o, legs=live_legs))
+        return kept
 
     def order_history(self, symbols=None, limit: int = 100) -> List[dict]:
         """Every recent order whatever its status, newest first.

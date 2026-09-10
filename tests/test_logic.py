@@ -1268,12 +1268,59 @@ check("open_orders asks for more than one page of orders",
 check("open_orders asks for the nested legs too",
       str(_seen.get("nested", "")).lower() in ("true", "1"), str(_seen))
 
+# The real shape, taken from the account on 2026-09-10. A bracket's legs stay
+# children of the entry order, so once the entry fills the parent is no longer
+# open and status=open drops the group -- carrying the working stop leg out
+# with it. The take-profit survives because it is live on the exchange in its
+# own right. That is a fully protected position reading as a naked one behind
+# an orphaned target, and it is where every UNPROTECTED alarm came from.
+from tbot import watch as _watch
+
+_ABNB_STOP = {"id": "leg-stop", "symbol": "ABNB", "side": "sell", "type": "stop",
+              "qty": "71", "stop_price": "155.82", "status": "held"}
+_ABNB_TP = {"id": "leg-tp", "symbol": "ABNB", "side": "sell", "type": "limit",
+            "qty": "71", "limit_price": "197.25", "status": "new"}
+_ABNB_ENTRY = {"id": "parent", "symbol": "ABNB", "side": "buy", "type": "market",
+               "qty": "71", "status": "filled", "submitted_at": "2026-09-09T23:25:00Z",
+               "legs": [_ABNB_TP, _ABNB_STOP]}
+
+
+def _alpaca(params=None, **kw):
+    """Answers the two queries the way the live account did."""
+    params = params or {}
+    if params.get("status") == "open":
+        return [dict(_ABNB_TP)]            # the held leg and its parent vanish
+    return [dict(_ABNB_ENTRY)]             # status=all keeps the whole group
+
+
+_b = AlpacaBroker(key="k", secret="s", base_url=PAPER_URL)
+_b._request = lambda method, path, **kw: _alpaca(**kw)
+_orders = _b.open_orders()
+_flat = _watch._flatten_orders(_orders)
+check("the working stop leg of a filled bracket is found",
+      any(o.get("id") == "leg-stop" for o in _flat),
+      str([o.get("id") for o in _flat]))
+check("and the position reads as covered, not naked",
+      not _watch.unprotected([{"symbol": "ABNB", "shares": 71}], _orders),
+      str(_watch.unprotected([{"symbol": "ABNB", "shares": 71}], _orders)))
+check("the filled entry is not mistaken for a working order",
+      not any(o.get("id") == "parent" and str(o.get("status")) == "filled"
+              and o.get("side") == "sell" for o in _flat))
+
+# A bracket whose legs are all done leaves nothing to protect the position, and
+# that really is exposure rather than a reporting fault.
+_dead = dict(_ABNB_ENTRY, legs=[dict(_ABNB_TP, status="filled"),
+                                dict(_ABNB_STOP, status="canceled")])
+_b._request = lambda method, path, **kw: [dict(_dead)]
+check("a bracket with no working leg left is reported exposed",
+      _watch.unprotected([{"symbol": "ABNB", "shares": 71}],
+                         _b.open_orders()) == {"ABNB": 71})
+
 _legged = [{"symbol": "CL", "side": "sell", "type": "limit", "qty": "224",
-            "limit_price": "97.66", "status": "new", "id": "parent",
+            "limit_price": "97.66", "status": "new", "id": "oco-parent",
             "legs": [{"symbol": "CL", "side": "sell", "type": "stop",
                       "qty": "224", "stop_price": "84.64", "status": "new",
-                      "id": "leg-stop"}]}]
-from tbot import watch as _watch
+                      "id": "oco-leg-stop"}]}]
 check("a stop nested inside an OCO parent counts as protection",
       not _watch.unprotected([{"symbol": "CL", "shares": 224}], _legged),
       str(_watch.unprotected([{"symbol": "CL", "shares": 224}], _legged)))
