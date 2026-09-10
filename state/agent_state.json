@@ -1,17 +1,45 @@
 {
-  "updated_at": "2026-09-09T23:25:09+00:00",
+  "updated_at": "2026-09-10T15:07:33+00:00",
   "mode": "paper",
   "healthy": true,
   "account": {
-    "equity": 99123.03,
-    "cash": 36523.97,
-    "buying_power": 321373.26,
+    "equity": 98757.15,
+    "cash": 86.31,
+    "buying_power": 276623.58,
     "status": "ACTIVE",
     "pattern_day_trader": null,
     "trading_blocked": false,
     "mode": "PAPER"
   },
   "positions": [
+    {
+      "symbol": "ABNB",
+      "shares": 71,
+      "avg_entry": 167.804789,
+      "market_value": 11998.29,
+      "unrealized_pl": 84.149981
+    },
+    {
+      "symbol": "ABT",
+      "shares": 142,
+      "avg_entry": 104.877324,
+      "market_value": 14787.88,
+      "unrealized_pl": -104.700008
+    },
+    {
+      "symbol": "ADP",
+      "shares": 35,
+      "avg_entry": 267.998286,
+      "market_value": 9301.6,
+      "unrealized_pl": -78.34001
+    },
+    {
+      "symbol": "AMZN",
+      "shares": 1,
+      "avg_entry": 250.27,
+      "market_value": 252.245,
+      "unrealized_pl": 1.975
+    },
     {
       "symbol": "CL",
       "shares": 224,
@@ -23,15 +51,15 @@
       "symbol": "JCI",
       "shares": 128,
       "avg_entry": 146.42,
-      "market_value": 18549.76,
-      "unrealized_pl": -192.0
+      "market_value": 18426.88,
+      "unrealized_pl": -314.88
     },
     {
       "symbol": "QQQ",
       "shares": 34,
       "avg_entry": 718.85,
-      "market_value": 24330.5836,
-      "unrealized_pl": -110.3164
+      "market_value": 24184.2,
+      "unrealized_pl": -256.7
     }
   ],
   "signals": [
@@ -112,7 +140,40 @@
     }
   ],
   "exits": [],
-  "protected": [],
+  "protected": [
+    {
+      "symbol": "ABNB",
+      "shares": 71,
+      "stop": 158.13,
+      "target": 197.25,
+      "replaced_orphaned_target": true,
+      "status": "pending_new"
+    },
+    {
+      "symbol": "ABT",
+      "shares": 142,
+      "stop": 98.79,
+      "target": 119.14,
+      "replaced_orphaned_target": true,
+      "status": "pending_new"
+    },
+    {
+      "symbol": "ADP",
+      "shares": 35,
+      "stop": 253.72,
+      "target": 296.16,
+      "replaced_orphaned_target": true,
+      "status": "pending_new"
+    },
+    {
+      "symbol": "AMZN",
+      "shares": 1,
+      "stop": 239.74,
+      "target": 284.75,
+      "replaced_orphaned_target": true,
+      "status": "pending_new"
+    }
+  ],
   "skipped": [
     {
       "symbol": "AMGN",
@@ -255,7 +316,13 @@
       "reason": "position would be less than one share"
     }
   ],
-  "findings": [],
+  "findings": [
+    {
+      "severity": "info",
+      "agent": "reconcile",
+      "message": "new since last run: ABNB, ABT, ADP, AMZN"
+    }
+  ],
   "briefing": "Research is off. Add ANTHROPIC_API_KEY to your .env file to get a written briefing here.",
   "recent_trades": [
     {
@@ -301,5 +368,6 @@
     "llm_calls": 0,
     "llm_errors": 0,
     "enabled": false
-  }
+  },
+  "monitor_only": true
 }
