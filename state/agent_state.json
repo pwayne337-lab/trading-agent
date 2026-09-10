@@ -1,11 +1,11 @@
 {
-  "updated_at": "2026-09-10T19:02:42+00:00",
+  "updated_at": "2026-09-10T23:19:50+00:00",
   "mode": "paper",
   "healthy": true,
   "account": {
-    "equity": 98427.07,
+    "equity": 98326.16,
     "cash": 86.31,
-    "buying_power": 275699.37,
+    "buying_power": 275416.82,
     "status": "ACTIVE",
     "pattern_day_trader": null,
     "trading_blocked": false,
@@ -16,150 +16,141 @@
       "symbol": "ABNB",
       "shares": 71,
       "avg_entry": 167.804789,
-      "market_value": 11901.02,
-      "unrealized_pl": -13.120019
+      "market_value": 11913.8,
+      "unrealized_pl": -0.340019
     },
     {
       "symbol": "ABT",
       "shares": 142,
       "avg_entry": 104.877324,
-      "market_value": 14731.08,
-      "unrealized_pl": -161.500008
+      "market_value": 14677.12,
+      "unrealized_pl": -215.460008
     },
     {
       "symbol": "ADP",
       "shares": 35,
       "avg_entry": 267.998286,
-      "market_value": 9347.275,
-      "unrealized_pl": -32.66501
+      "market_value": 9356.55,
+      "unrealized_pl": -23.39001
     },
     {
       "symbol": "AMZN",
       "shares": 1,
       "avg_entry": 250.27,
-      "market_value": 251.6,
-      "unrealized_pl": 1.33
+      "market_value": 251.78,
+      "unrealized_pl": 1.51
     },
     {
       "symbol": "CL",
       "shares": 224,
       "avg_entry": 88.24,
-      "market_value": 19725.44,
-      "unrealized_pl": -40.32
+      "market_value": 19689.6,
+      "unrealized_pl": -76.16
     },
     {
       "symbol": "JCI",
       "shares": 128,
       "avg_entry": 146.42,
-      "market_value": 18268.1472,
-      "unrealized_pl": -473.6128
+      "market_value": 18279.68,
+      "unrealized_pl": -462.08
     },
     {
       "symbol": "QQQ",
       "shares": 34,
       "avg_entry": 718.85,
-      "market_value": 24116.2,
-      "unrealized_pl": -324.7
+      "market_value": 24071.32,
+      "unrealized_pl": -369.58
     }
   ],
   "signals": [
     {
-      "symbol": "ABNB",
-      "entry": 169.63,
-      "stop": 155.8214,
-      "target": 197.2472,
-      "shares": 71,
+      "symbol": "AAPL",
+      "entry": 326.57,
+      "stop": 309.1107,
+      "target": 361.4886,
+      "shares": 56,
+      "strategy": "pullback",
+      "why": "pullback to the 20 EMA, reclaimed; stop 2.21x ATR below entry"
+    },
+    {
+      "symbol": "AMGN",
+      "entry": 382.47,
+      "stop": 353.4418,
+      "target": 440.5264,
+      "shares": 33,
+      "strategy": "reversion",
+      "why": "RSI(2) at 2, below the 10-day average; stop 2.50x ATR below entry"
+    },
+    {
+      "symbol": "APD",
+      "entry": 293.65,
+      "stop": 278.465,
+      "target": 324.02,
+      "shares": 39,
       "strategy": "reversion",
       "why": "RSI(2) at 3, below the 10-day average; stop 2.50x ATR below entry"
-    },
-    {
-      "symbol": "ABT",
-      "entry": 105.23,
-      "stop": 98.2729,
-      "target": 119.1442,
-      "shares": 142,
-      "strategy": "reversion",
-      "why": "RSI(2) at 5, below the 10-day average; stop 2.50x ATR below entry"
-    },
-    {
-      "symbol": "ADP",
-      "entry": 265.22,
-      "stop": 249.7518,
-      "target": 296.1564,
-      "shares": 35,
-      "strategy": "reversion",
-      "why": "RSI(2) at 3, below the 10-day average; stop 2.50x ATR below entry"
-    },
-    {
-      "symbol": "AMZN",
-      "entry": 252.4,
-      "stop": 236.2225,
-      "target": 284.755,
-      "shares": 1,
-      "strategy": "reversion",
-      "why": "RSI(2) at 9, below the 10-day average; stop 2.50x ATR below entry"
     }
   ],
   "vetoes": [],
   "orders": [
     {
-      "symbol": "ABNB",
-      "shares": 71,
-      "stop": 155.8214,
-      "target": 197.2472,
-      "dollars_at_risk": 980.41,
-      "order_id": "3abc39f9-5ea9-4bcd-87f6-c09b439cf3c6",
-      "strategy": "reversion"
+      "symbol": "AAPL",
+      "shares": 56,
+      "stop": 309.1107,
+      "target": 361.4886,
+      "dollars_at_risk": 977.72,
+      "order_id": "7b9cd5ff-3b5f-4747-a06b-ee5032c232dd",
+      "strategy": "pullback"
     },
-    {
-      "symbol": "ABT",
-      "shares": 142,
-      "stop": 98.2729,
-      "target": 119.1442,
-      "dollars_at_risk": 987.91,
-      "order_id": "40331685-981c-4711-af88-26444a5f33c1",
-      "strategy": "reversion"
-    },
-    {
-      "symbol": "ADP",
-      "shares": 35,
-      "stop": 249.7518,
-      "target": 296.1564,
-      "dollars_at_risk": 541.39,
-      "order_id": "2bbfcb9a-a97e-4630-b9d2-f91bdc17ede6",
-      "strategy": "reversion"
-    },
-    {
-      "symbol": "AMZN",
-      "shares": 1,
-      "stop": 236.2225,
-      "target": 284.755,
-      "dollars_at_risk": 16.18,
-      "order_id": "7d8a1bdc-6fb8-49f0-aeb5-9bf4129fde13",
-      "strategy": "reversion"
-    }
-  ],
-  "exits": [],
-  "protected": [],
-  "skipped": [
     {
       "symbol": "AMGN",
-      "reason": "position would be less than one share"
+      "shares": 33,
+      "stop": 353.4418,
+      "target": 440.5264,
+      "dollars_at_risk": 957.93,
+      "order_id": "5d7ef70e-ff63-4287-a855-f6c6420fda3c",
+      "strategy": "reversion"
     },
     {
       "symbol": "APD",
-      "reason": "position would be less than one share"
+      "shares": 39,
+      "stop": 278.465,
+      "target": 324.02,
+      "dollars_at_risk": 592.21,
+      "order_id": "f28fcfff-c8ed-403b-a89a-af0d946e681a",
+      "strategy": "reversion"
+    }
+  ],
+  "exits": [
+    {
+      "symbol": "JCI",
+      "reason": "trend break: closed at $142.81, below the 50-day average of $144.75",
+      "status": "accepted",
+      "unrealized_pl": -462.08
     },
+    {
+      "symbol": "QQQ",
+      "reason": "trend break: closed at $708.69, below the 50-day average of $710.61",
+      "status": "accepted",
+      "unrealized_pl": -369.58
+    }
+  ],
+  "protected": [],
+  "skipped": [
     {
       "symbol": "BLK",
       "reason": "position would be less than one share"
     },
     {
       "symbol": "BMY",
+      "reason": "risking $3.74, under the $245.82 minimum for a trade (25% of a normal position)"
+    },
+    {
+      "symbol": "CI",
       "reason": "position would be less than one share"
     },
     {
-      "symbol": "CMG",
+      "symbol": "COF",
       "reason": "position would be less than one share"
     },
     {
@@ -167,23 +158,27 @@
       "reason": "position would be less than one share"
     },
     {
-      "symbol": "CVX",
+      "symbol": "CTAS",
       "reason": "position would be less than one share"
     },
     {
-      "symbol": "DIS",
+      "symbol": "DIA",
       "reason": "position would be less than one share"
     },
     {
-      "symbol": "EOG",
+      "symbol": "EFA",
       "reason": "position would be less than one share"
     },
     {
-      "symbol": "FDX",
+      "symbol": "GE",
       "reason": "position would be less than one share"
     },
     {
       "symbol": "GILD",
+      "reason": "position would be less than one share"
+    },
+    {
+      "symbol": "GM",
       "reason": "position would be less than one share"
     },
     {
@@ -195,6 +190,10 @@
       "reason": "position would be less than one share"
     },
     {
+      "symbol": "IWM",
+      "reason": "position would be less than one share"
+    },
+    {
       "symbol": "LLY",
       "reason": "position would be less than one share"
     },
@@ -203,7 +202,11 @@
       "reason": "position would be less than one share"
     },
     {
-      "symbol": "MDLZ",
+      "symbol": "MDY",
+      "reason": "position would be less than one share"
+    },
+    {
+      "symbol": "MET",
       "reason": "position would be less than one share"
     },
     {
@@ -211,27 +214,27 @@
       "reason": "position would be less than one share"
     },
     {
-      "symbol": "MRSH",
+      "symbol": "MRK",
       "reason": "position would be less than one share"
     },
     {
-      "symbol": "PAYX",
+      "symbol": "NVDA",
       "reason": "position would be less than one share"
     },
     {
       "symbol": "PFE",
+      "reason": "risking $2.85, under the $245.82 minimum for a trade (25% of a normal position)"
+    },
+    {
+      "symbol": "PM",
       "reason": "position would be less than one share"
     },
     {
-      "symbol": "ROST",
+      "symbol": "REGN",
       "reason": "position would be less than one share"
     },
     {
       "symbol": "RSP",
-      "reason": "position would be less than one share"
-    },
-    {
-      "symbol": "RTX",
       "reason": "position would be less than one share"
     },
     {
@@ -243,15 +246,11 @@
       "reason": "position would be less than one share"
     },
     {
-      "symbol": "T",
+      "symbol": "SPY",
       "reason": "position would be less than one share"
     },
     {
       "symbol": "TGT",
-      "reason": "position would be less than one share"
-    },
-    {
-      "symbol": "UNP",
       "reason": "position would be less than one share"
     },
     {
@@ -263,12 +262,12 @@
       "reason": "position would be less than one share"
     },
     {
-      "symbol": "XLB",
+      "symbol": "WDAY",
       "reason": "position would be less than one share"
     },
     {
-      "symbol": "XLE",
-      "reason": "position would be less than one share"
+      "symbol": "XLB",
+      "reason": "risking $2.06, under the $245.82 minimum for a trade (25% of a normal position)"
     },
     {
       "symbol": "XLP",
@@ -276,7 +275,7 @@
     },
     {
       "symbol": "XLRE",
-      "reason": "position would be less than one share"
+      "reason": "risking $1.33, under the $245.82 minimum for a trade (25% of a normal position)"
     },
     {
       "symbol": "XLV",
@@ -319,16 +318,17 @@
   "carried_reason": "",
   "strategy_by_symbol": {
     "CL": "reversion",
-    "JCI": "pullback",
     "ABNB": "reversion",
     "ABT": "reversion",
     "ADP": "reversion",
-    "AMZN": "reversion"
+    "AMZN": "reversion",
+    "AAPL": "pullback",
+    "AMGN": "reversion",
+    "APD": "reversion"
   },
   "research": {
     "llm_calls": 0,
     "llm_errors": 0,
     "enabled": false
-  },
-  "monitor_only": true
+  }
 }
