@@ -1145,20 +1145,24 @@ def cmd_status(args):
     # position with a live take-profit means its stop is gone, and "gone"
     # splits two ways -- never created, or created and then killed -- which
     # need opposite fixes. The status and the timestamps say which.
-    if exposed:
-        try:
-            history = broker.order_history(
-                symbols=[p["symbol"] for p in pos], limit=200)
-        except BrokerError as exc:
-            history = []
-            print(f"\nCannot read the order history: {exc}")
-        if history:
-            print(f"\nRecent orders on those symbols, whatever their state "
-                  f"(newest first):")
-            shown = 0
+    try:
+        history = broker.order_history(
+            symbols=[p["symbol"] for p in pos], limit=200)
+    except BrokerError as exc:
+        history = []
+        print(f"\nCannot read the order history: {exc}")
+    if history:
+        # Not gated on anything being exposed right now. The question this
+        # answers is what happened to the stop legs of brackets already
+        # repaired, and by then the position is covered and the evidence is
+        # entirely in orders that are no longer working.
+        print(f"\nRecent orders on the held symbols, whatever their state "
+              f"(newest first):")
+        shown = 0
+        if True:
             for o in watch._flatten_orders(history):
                 sym = str(o.get("symbol") or "")
-                if sym not in exposed:
+                if not sym:
                     continue
                 stamp = (str(o.get("canceled_at") or o.get("filled_at")
                              or o.get("submitted_at") or "")[:19]).replace("T", " ")
@@ -1169,13 +1173,13 @@ def cmd_status(args):
                       f"limit {str(o.get('limit_price') or '-'):>9s}  "
                       f"{str(o.get('status')):16s} {stamp}")
                 shown += 1
-                if shown >= 40:
+                if shown >= 60:
                     print("  ... older orders not shown")
                     break
-            print("\nA sell stop here with status cancelled, timestamped after "
-                  "the buy filled, means something is killing the stop leg "
-                  "after the bracket goes on. No sell stop at all means the "
-                  "bracket never created one.")
+            print("\nA sell stop with status cancelled, timestamped after its "
+                  "buy filled, means something kills the stop leg once the "
+                  "bracket is on. A buy that filled with no sell stop anywhere "
+                  "after it means the bracket never created one.")
 
     if exposed:
         print("\nA symbol shown here with 0 sell orders seen, that the broker "
