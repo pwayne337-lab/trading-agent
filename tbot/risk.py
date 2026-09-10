@@ -77,6 +77,23 @@ def size_position(equity: float, entry: float, stop: float, cfg_risk, cfg_strate
         empty.rejected_reason = "position would be less than one share"
         return empty
 
+    # The caps above are ceilings, so whatever candidate is sized last gets the
+    # leftover room however small it is. A trade carrying a fraction of a risk
+    # unit still occupies a position slot, still needs a stop behind it, and is
+    # still managed and reported like a full one, while being far too small to
+    # matter either way. Judged in risk rather than dollars or shares, so it
+    # scales with the account and means the same thing on a $250 share as on a
+    # $25 one.
+    floor = getattr(cfg_risk, "min_risk_fraction", 0.0) or 0.0
+    if floor > 0:
+        min_risk = dollars_to_risk * floor
+        if shares * risk_per_share < min_risk:
+            empty.rejected_reason = (
+                f"risking ${shares * risk_per_share:,.2f}, under the "
+                f"${min_risk:,.2f} minimum for a trade "
+                f"({floor * 100:.0f}% of a normal position)")
+            return empty
+
     target = entry + cfg_strategy.reward_risk * risk_per_share
     notional = shares * entry
 

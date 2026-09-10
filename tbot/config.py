@@ -228,6 +228,16 @@ class RiskConfig:
     # Never use margin. Total cost basis of open positions stays under equity.
     max_gross_exposure: float = 1.00
 
+    # The smallest trade worth taking, as a fraction of a normal risk unit.
+    # The caps above are ceilings, so the last candidate of a run gets whatever
+    # room is left over, however little that is: on 2026-09-09 that was $255 of
+    # room against a $252 share, and AMZN went in at one share risking $16.18
+    # where a full position risks $991. That trade cannot move the account, but
+    # it takes one of the max_open_positions slots, needs a stop, and is
+    # monitored and reported like any other. Below this fraction the room is
+    # better left unspent. Set to 0.0 to take whatever fits.
+    min_risk_fraction: float = 0.25
+
     # Circuit breaker. If the account is this far below its high water mark,
     # the agent stops opening new trades and says so on the dashboard.
     max_drawdown_halt: float = 0.20

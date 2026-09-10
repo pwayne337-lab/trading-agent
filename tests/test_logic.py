@@ -1357,6 +1357,72 @@ finally:
     _research.next_earnings_date = _orig_earnings
 
 
+# ---------------------------------------------------------------------------
+print("\nA trade too small to matter is not worth a position slot")
+# ---------------------------------------------------------------------------
+# The position, notional and exposure caps are all ceilings, so whichever
+# candidate is sized last takes whatever room is left. On 2026-09-09 that was
+# $255.35 of room against a $252.40 share: AMZN went in at one share risking
+# $16.18 where a full position risks $991. It cannot move the account, and it
+# still holds a slot, needs a stop, and is managed and reported like a real one.
+
+from dataclasses import replace as _replace
+
+_cfg = AgentConfig()
+_r, _s = _cfg.risk, _cfg.strategy
+_EQ = 99123.03
+
+# The live case, reproduced exactly.
+_held = 19718.72 + 18549.76 + 24330.58
+_gross = _held + 12043.73 + 14942.19 + 9282.70     # after ABNB, ABT, ADP
+_o = size_position(_EQ, 252.40, 236.22, _r, _s,
+                   open_positions=6, gross_exposure=_gross)
+check("the one-share AMZN trade is refused", _o.shares == 0,
+      f"{_o.shares} shares")
+check("and the reason names the minimum rather than the share count",
+      "minimum for a trade" in (_o.rejected_reason or ""), _o.rejected_reason)
+
+# ADP, squeezed to about half size on the same run, is still worth taking.
+_o = size_position(_EQ, 265.22, 249.75, _r, _s, open_positions=5,
+                   gross_exposure=_held + 12043.73 + 14942.19)
+check("a trade squeezed to half size is still taken", _o.shares == 35,
+      f"{_o.shares} shares risking ${_o.dollars_at_risk:,.2f}")
+
+# A full-size trade with room to spare is untouched by any of this.
+_o = size_position(_EQ, 100.0, 90.0, _r, _s, open_positions=0, gross_exposure=0.0)
+check("a full-size trade is unaffected by the floor", _o.shares == 99,
+      f"{_o.shares} shares risking ${_o.dollars_at_risk:,.2f}")
+
+# Right at the boundary, in both directions.
+_floor_dollars = _EQ * _r.risk_per_trade * _r.min_risk_fraction
+_o = size_position(_EQ, 110.0, 100.0, _r, _s, open_positions=0,
+                   gross_exposure=_EQ - 10 * 110.0)      # room for 10 shares
+check("ten shares risking $100 is under the floor and refused",
+      _o.shares == 0, f"{_o.shares} sh, floor ${_floor_dollars:,.2f}")
+_o = size_position(_EQ, 110.0, 100.0, _r, _s, open_positions=0,
+                   gross_exposure=_EQ - 30 * 110.0)      # room for 30 shares
+check("thirty shares risking $300 clears it", _o.shares == 30,
+      f"{_o.shares} sh risking ${_o.dollars_at_risk:,.2f}")
+
+# The floor is a setting, not a law. Zero restores the old behaviour.
+_off = _replace(_r, min_risk_fraction=0.0)
+_o = size_position(_EQ, 252.40, 236.22, _off, _s,
+                   open_positions=6, gross_exposure=_gross)
+check("min_risk_fraction 0.0 takes whatever fits, as before", _o.shares == 1,
+      f"{_o.shares} shares")
+
+# A config predating the setting must not crash the sizer.
+class _OldRisk:
+    pass
+_old = _OldRisk()
+for _f in ("risk_per_trade", "max_position_pct", "max_gross_exposure",
+           "max_open_positions"):
+    setattr(_old, _f, getattr(_r, _f))
+_o = size_position(_EQ, 100.0, 90.0, _old, _s, open_positions=0, gross_exposure=0.0)
+check("a config without the setting still sizes normally", _o.shares == 99,
+      f"{_o.shares} shares")
+
+
 print("\n" + "=" * 60)
 if FAILURES:
     print(f"{len(FAILURES)} CHECK(S) FAILED:")
