@@ -167,6 +167,23 @@ class AlpacaBroker:
                              params={"status": "open", "limit": 500,
                                      "nested": "true"})
 
+    def order_history(self, symbols=None, limit: int = 100) -> List[dict]:
+        """Every recent order whatever its status, newest first.
+
+        open_orders answers "what is working now", which cannot explain a stop
+        that is not working. This answers "what happened to it": an order that
+        was created and then cancelled comes back with status cancelled and the
+        time it happened, and one that was never created does not come back at
+        all. Those need completely different fixes, and nothing else in the
+        adapter can tell them apart.
+        """
+        params = {"status": "all", "limit": min(int(limit), 500),
+                  "direction": "desc", "nested": "true"}
+        if symbols:
+            params["symbols"] = ",".join(sorted(set(symbols)))
+        out = self._request("GET", "/v2/orders", params=params)
+        return out if isinstance(out, list) else []
+
     def clock(self) -> dict:
         return self._request("GET", "/v2/clock")
 
