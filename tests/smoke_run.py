@@ -861,7 +861,13 @@ check("an oversized position is flagged even though no rule created it",
 # A failure the next run has already moved past is history, not an alarm. A
 # caution banner on a dashboard whose own run was clean teaches you to ignore
 # banners, which is the one habit this whole system cannot afford.
-_failed_once = {"updated_at": "2026-09-07T04:48:47+00:00", "positions": [],
+# The timestamp has to move with the clock. check_run_health also judges how
+# long ago the previous run was, and a literal date here quietly rots: this
+# fixture was written on a Tuesday and passed, then failed the following
+# Saturday when the same date had aged into a stale-schedule CRITICAL that has
+# nothing to do with what these three checks are about. A test that starts
+# failing because time passed teaches you to ignore a red suite.
+_failed_once = {"updated_at": pd.Timestamp.utcnow().isoformat(), "positions": [],
                 "errors": ["the run failed partway through: TypeError: Iterator "
                            "operand or requested dtype holds references, but the "
                            "NPY_ITER_REFS_OK flag was not enabled"]}
@@ -875,6 +881,23 @@ check("but it is still on the record as history",
       str(_one))
 check("and the message is cut at a word, not mid-token",
       all(not x.message.rstrip(".").endswith("NPY_ITER_REFS_O") for x in _one))
+
+# The boundary the checks above never touched. `runs` is the log as it stood
+# before this run appended itself, so a trailing single failure means the most
+# recent run is the one that broke and nothing has fixed it. Reporting that as
+# quiet "since resolved" history was wrong twice over: it said the problem was
+# over while it was the newest thing that had happened, and it meant no warning
+# appeared until a SECOND run failed. The old fixture could not catch it --
+# its run log ended healthy, so the streak was 0 and the 1-vs-2 boundary was
+# never evaluated at all.
+_unrecovered = [{"healthy": True}, {"healthy": False}]
+_alone = watch.check_run_health(_failed_once, [], runs=_unrecovered)
+check("a failure nothing has recovered from IS a warning",
+      any(x.severity == watch.WARNING for x in _alone),
+      str([(x.severity, x.message[:60]) for x in _alone]))
+check("and it is not described as resolved",
+      not any("since resolved" in x.message for x in _alone),
+      str([x.message[:70] for x in _alone]))
 
 _still_failing = [{"healthy": True}, {"healthy": False}, {"healthy": False}]
 _streak = watch.check_run_health(_failed_once, [], runs=_still_failing)

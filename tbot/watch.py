@@ -454,10 +454,24 @@ def check_run_health(previous_state: Optional[dict], history: List[dict],
         if len(first) > 120:
             first = first[:120].rsplit(" ", 1)[0] + "..."
         when = str(previous_state.get("updated_at") or "")[:10]
+        # `runs` is the log as it stood before this run appended itself, so its
+        # last entry IS the run whose errors are being reported. That makes the
+        # streak the count of failures with nothing healthy after them:
+        #   0  a later run already recovered -- history, no banner
+        #   1  the most recent run failed and nothing has fixed it yet
+        #  2+  it keeps happening
+        # Only 0 has been resolved. Calling 1 "since resolved" told the reader
+        # the problem was over while it was still the newest thing that had
+        # happened, and no warning appeared until a second run failed.
         if streak >= 2:
             out.append(Finding(WARNING, "watchdog",
                                f"{streak} runs in a row have ended with errors. "
                                f"Most recent: {first}"))
+        elif streak == 1:
+            out.append(Finding(WARNING, "watchdog",
+                               f"the last run ({when}) ended with "
+                               f"{len(prev_errors)} error(s) and nothing has run "
+                               f"clean since: {first}"))
         else:
             out.append(Finding(INFO, "watchdog",
                                f"the previous run ({when}) ended with "
