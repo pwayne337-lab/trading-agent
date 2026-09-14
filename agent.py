@@ -186,13 +186,82 @@ def cmd_run(args):
                     _carry_display(st, state.load_state(),
                                    f"the run failed partway through "
                                    f"({type(exc).__name__})")
-                state.save_state(st)
+                # A crash still means the trading job ran. The marker tracks
+                # whether it ran at all; whether its runs are any good is the
+                # health watcher's job, and letting a crash also freeze the
+                # marker would report one fault as two.
+                state.save_state(st, full_run=True)
                 write_dashboard()
             except Exception:
                 pass   # already failing; do not fail differently
         print(f"\nRUN FAILED: {type(exc).__name__}: {exc}")
         print("The record and the dashboard were written so the failure is visible.")
         raise
+
+
+def cmd_refresh(args):
+    """Re-read the account and repaint the page. Nothing else.
+
+    It exists because the page used to freeze whenever the agent stopped.
+    When the daily job failed on 2026-09-11 the dashboard kept showing the
+    previous day's figures for three days, with nothing on it to say the agent
+    had not run since.
+
+    So this deliberately does very little: no market data, no strategy, no
+    watchers, no orders. It asks the broker what the account holds and writes
+    that to the page. Less code means fewer ways for the thing whose job is to
+    report a failure to fail in the same way.
+
+    The one thing it must never do is make a dead agent look alive. Refreshing
+    every hour keeps updated_at minutes old forever, which would leave the
+    staleness banner permanently green no matter how long the trading job had
+    been down. That is why last_full_run is a separate timestamp this never
+    touches: the figures can be current while the agent has not traded in days,
+    and the page has to be able to say both.
+    """
+    load_dotenv()
+    cfg = build_config(args)
+
+    broker = AlpacaBroker(dry_run=True)   # this path has no order calls at all
+
+    prev = state.load_state() or {}
+    st = state.blank_state()
+    for key, value in prev.items():
+        if key in st:
+            st[key] = value
+
+    st["mode"] = "live" if broker.is_live else "paper"
+    st["refresh_only"] = True
+    st["errors"] = []
+
+    try:
+        acct = broker.account()
+        positions = broker.positions()
+        orders_open = broker.open_orders()
+    except BrokerError as exc:
+        # Leave the previous figures and say why they were not refreshed. An
+        # unreachable broker is not an empty account.
+        print(f"Cannot reach the broker: {exc}")
+        st["errors"].append(f"refresh could not reach the broker: {exc}")
+        state.save_state(st)
+        write_dashboard()
+        return
+
+    st["account"] = acct
+    st["positions"] = positions
+    st["carried_from"] = None      # freshly measured, not carried
+    st["carried_reason"] = ""
+
+    print(f"Account: {acct['mode']}  equity ${acct['equity']:,.2f}")
+    print(f"Holding {len(positions)}: "
+          f"{sorted(p['symbol'] for p in positions) or 'nothing'}")
+    print(f"Working orders: {len(orders_open)}")
+    last = st.get("last_full_run")
+    print(f"Last full run: {last or 'never'}")
+
+    state.save_state(st)           # NOT full_run: nothing was traded
+    write_dashboard()
+    print("Page refreshed. No trading logic ran.")
 
 
 def cmd_monitor(args):
@@ -557,7 +626,7 @@ def _cmd_run(args):
         print("Set ALPACA_API_KEY and ALPACA_API_SECRET in .env (see .env.example).")
         st["errors"] = [f"broker unreachable: {exc}"]
         _carry_display(st, _prev, "the broker could not be reached")
-        state.save_state(st)
+        state.save_state(st, full_run=True)
         # Rebuild the page even on failure, so the dashboard reports the
         # outage instead of silently showing yesterday's numbers as current.
         write_dashboard()
@@ -595,7 +664,7 @@ def _cmd_run(args):
         st["account"] = acct
         st["positions"] = positions
         _carry_display(st, _prev, "the run was started while the market was open")
-        state.save_state(st)
+        state.save_state(st, full_run=True)
         write_dashboard()
         return
 
@@ -617,7 +686,7 @@ def _cmd_run(args):
         st["account"] = acct
         st["positions"] = positions
         _carry_display(st, _prev, "the working orders could not be read")
-        state.save_state(st)
+        state.save_state(st, full_run=True)
         write_dashboard()
         return
 
@@ -642,7 +711,7 @@ def _cmd_run(args):
         st["account"] = acct
         st["positions"] = positions
         _carry_display(st, _prev, "trading is blocked on this account")
-        state.save_state(st)
+        state.save_state(st, full_run=True)
         write_dashboard()
         print("Trading is blocked on this account. Exiting.")
         return
@@ -943,7 +1012,7 @@ def _cmd_run(args):
     st["healthy"] = not st["errors"]
 
     state.append_equity(equity, cash, open_count)
-    state.save_state(st)
+    state.save_state(st, full_run=True)
     state.log_run({"mode": st["mode"], "equity": equity,
                    "orders": len(st["orders"]), "vetoes": len(st["vetoes"]),
                    "submitted": bool(args.submit),
@@ -1250,6 +1319,11 @@ def main():
     mo.add_argument("--i-understand-the-risk", action="store_true",
                     help="third safety lock, required only for live accounts")
     mo.set_defaults(func=cmd_monitor)
+
+    rf = sub.add_parser("refresh",
+                        help="re-read the account and repaint the page only")
+    common(rf, start="2023-01-01")
+    rf.set_defaults(func=cmd_refresh)
 
     cp = sub.add_parser("compare", help="race several strategies against each other")
     common(cp, start="2005-01-01")

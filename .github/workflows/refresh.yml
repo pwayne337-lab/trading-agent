@@ -1,0 +1,85 @@
+# Keeps the dashboard current between runs. It does not trade.
+#
+# The page used to freeze whenever the agent stopped. When the daily job failed
+# on 2026-09-11 it kept showing Thursday's figures until Monday, with nothing on
+# it to say the agent had not run since. This job re-reads the account every
+# hour and repaints the page, so what you are looking at is real even on a day
+# the trading run never happens.
+#
+# It deliberately does almost nothing: no market data, no strategy, no watchers,
+# no orders. Its value is that it still works when the trading job does not, so
+# every dependency it does not have is a dependency that cannot take it down
+# with the thing it is supposed to report on.
+#
+# For the same reason it is NOT gated behind the full test suite, unlike every
+# workflow that can place an order. That gate is what stopped the agent in
+# September, and a reporter that dies whenever the thing it reports on is
+# broken is worse than no reporter. It is safe to run ungated because it has no
+# code path that submits anything: `agent.py refresh` builds its broker in
+# dry-run mode and never calls an order method. The smoke suite proves that.
+name: Refresh the page
+
+on:
+  # Hourly through the session. Cron does not follow daylight saving, so the
+  # window is set wide enough to cover the US market in both halves of the
+  # year: 14:00-21:00 UTC is 10am-5pm ET in summer and 9am-4pm ET in winter.
+  # A refresh outside market hours costs nothing and reports the same truth.
+  schedule:
+    - cron: "0 14-21 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: read      # it commits nothing
+  pages: write
+  id-token: write
+
+concurrency:
+  # Its own group, not the trading group. This must never sit in a queue behind
+  # the job it exists to report on -- if the daily run hangs, this is the thing
+  # that should still be publishing. It places no orders, so it cannot collide
+  # with the agent over the order book.
+  group: page-refresh
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Re-read the account
+        env:
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_API_SECRET: ${{ secrets.ALPACA_API_SECRET }}
+          ALPACA_BASE_URL: ${{ secrets.ALPACA_BASE_URL }}
+        run: python agent.py refresh
+
+      # Nothing is committed. The state file is the trading run's record of the
+      # day, and an hourly job writing to it would race the daily run's push
+      # eight times a session for no benefit. The page below is built from this
+      # run's own state in this same job, so it is current either way.
+      - uses: actions/upload-pages-artifact@v3
+        if: always()
+        with:
+          path: site
+
+  publish:
+    needs: refresh
+    runs-on: ubuntu-latest
+    concurrency:
+      group: pages-deploy
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

@@ -119,8 +119,38 @@ def build_html(state: dict = None, history: list = None,
                   'Positions, orders and the safety checks below were refreshed '
                   'just now. Any signals and orders shown are from the last '
                   'after-close run; this check does not trade.</div>')
+    elif state.get("refresh_only"):
+        banner = ('<div class="banner info"><strong>Live figures.</strong> '
+                  'The account below was re-read just now. Signals, orders and '
+                  'checks are from the last trading run; this refresh does not '
+                  'run the strategy.</div>')
     else:
         banner = ""
+
+    # How long since the trading logic actually ran, which is a different
+    # question from how old the figures are. The refresh job re-reads the
+    # account every hour, so the staleness banner above is green almost
+    # always -- and on its own it would have said everything was fine right
+    # through the three days in September when the agent was not running at
+    # all. This is the banner that would have caught it.
+    _last_full = state.get("last_full_run")
+    if state.get("updated_at"):
+        _full_str, _full_hrs, _ = _age(_last_full)
+        if not _last_full:
+            banner += ('<div class="banner critical"><strong>The agent has not '
+                       'traded.</strong> These figures are current, but no '
+                       'trading run is on record. The numbers are real; the '
+                       'agent behind them is not running.</div>')
+        elif _full_hrs >= 72:
+            banner += (f'<div class="banner critical"><strong>Not trading.</strong> '
+                       f'The figures below are current, but the agent last ran '
+                       f'{_esc(_full_str)}. Something is stopping the scheduled '
+                       f'run: check the Actions tab.</div>')
+        elif _full_hrs >= 30:
+            banner += (f'<div class="banner warning"><strong>No run since '
+                       f'{_esc(_full_str)}.</strong> The account below is current, '
+                       f'but the trading logic has not run. Fine over a weekend '
+                       f'or a holiday, not fine on a Wednesday.</div>')
 
     if carried_from:
         why = _esc(state.get("carried_reason") or "the run stopped early")
@@ -539,6 +569,10 @@ def write_dashboard(title: str = "Trading agent") -> Path:
     (SITE / "data.json").write_text(json.dumps({
         "updated_at": st.get("updated_at"),
         "carried_from": st.get("carried_from"),
+        # So the freshness of the figures and the freshness of the agent can be
+        # told apart without parsing the page.
+        "last_full_run": st.get("last_full_run"),
+        "refresh_only": bool(st.get("refresh_only")),
         "mode": st.get("mode"),
         "equity": (st.get("account") or {}).get("equity"),
         "positions": len(st.get("positions") or []),

@@ -50,6 +50,12 @@ def blank_state() -> dict:
         # above were carried over from the run named here. The dashboard dates
         # them by this stamp, so a page rebuilt by an aborted run cannot pass
         # off the previous run's snapshot as a new measurement.
+        # When the trading logic itself last ran, as opposed to when the
+        # figures on the page were last measured. The refresh job re-reads the
+        # account every hour, so updated_at is almost always minutes old; if
+        # that were the only timestamp, an agent that had stopped running
+        # entirely would still look perfectly healthy.
+        "last_full_run": None,
         "carried_from": None,
         "carried_reason": "",
         # Which rule set opened each open position. The broker does not record
@@ -70,8 +76,14 @@ def load_state() -> dict:
         return blank_state()
 
 
-def save_state(state: dict) -> Path:
+def save_state(state: dict, full_run: bool = False) -> Path:
+    """Write the state file. `full_run` means the trading logic ran this time,
+    as opposed to a refresh or a monitoring check that only re-read the
+    account, and it is what the dashboard's "last traded" marker is built on.
+    """
     state["updated_at"] = now_iso()
+    if full_run:
+        state["last_full_run"] = state["updated_at"]
     STATE_FILE.write_text(json.dumps(state, indent=2, default=str))
     return STATE_FILE
 

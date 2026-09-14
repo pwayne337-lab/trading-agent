@@ -741,6 +741,135 @@ check("but it still records the account it did read",
 
 
 # ---------------------------------------------------------------------------
+print("\nE5. The hourly refresh reports without running anything")
+# ---------------------------------------------------------------------------
+# It exists so the page stops freezing when the agent stops. Its whole value is
+# that it still works when the trading job does not, so it must place no
+# orders, need no market data, and above all never make a dead agent look
+# alive.
+
+def run_refresh(positions, orders, broker=None, seed_state=None):
+    bars = build_bars()
+    if broker is None:
+        broker = FakeBroker(positions, orders, dry_run=True)
+    agent_mod.AlpacaBroker = lambda **kw: broker
+
+    def _no_data(*a, **k):
+        raise AssertionError("refresh must not download market data")
+    datamod.load_universe = _no_data
+
+    tmp = Path(tempfile.mkdtemp())
+    state_mod.STATE_DIR = tmp
+    state_mod.STATE_FILE = tmp / "agent_state.json"
+    state_mod.EQUITY_FILE = tmp / "equity_history.csv"
+    state_mod.RUNLOG_FILE = tmp / "run_log.jsonl"
+    if seed_state is not None:
+        state_mod.save_state(dict(seed_state))
+
+    from tbot import dashboard as dash_mod
+    dash_mod.SITE = tmp
+    agent_mod.write_dashboard = lambda title="Trading agent": (
+        (tmp / "index.html").write_text(dash_mod.build_html(title=title))
+        or (tmp / "index.html"))
+
+    args = argparse.Namespace(symbols="UP,DOWNTREND,TWIN,FLAT",
+                              start="2016-01-01", equity=None, risk=None,
+                              refresh=True)
+    agent_mod.cmd_refresh(args)
+    out = state_mod.load_state()
+    datamod.load_universe = _real_load_universe
+    return broker, out, tmp
+
+
+_real_load_universe = datamod.load_universe
+
+_pos = [{"symbol": "UP", "shares": 10, "avg_entry": 100.0,
+         "market_value": 1200.0, "unrealized_pl": 200.0}]
+
+b, st, tmp = run_refresh(_pos, [])
+check("the refresh places no orders at all",
+      b.submitted == [] and b.closed == [] and b.protected == [],
+      f"submitted={b.submitted} closed={b.closed} protected={b.protected}")
+check("it records the account it read",
+      [p["symbol"] for p in st["positions"]] == ["UP"], str(st["positions"]))
+check("and marks itself as a refresh, not a run",
+      st.get("refresh_only") is True, str(st.get("refresh_only")))
+check("it writes no equity row", not (tmp / "equity_history.csv").exists())
+check("and no run-log entry", not (tmp / "run_log.jsonl").exists())
+
+# The trap. Refreshing hourly keeps updated_at minutes old forever. If that
+# were the only timestamp, an agent that had stopped entirely would read as
+# perfectly healthy -- which is exactly how three days went by in September
+# with a frozen page and nothing on it saying so.
+_traded_long_ago = dict(state_mod.blank_state())
+_traded_long_ago["last_full_run"] = (pd.Timestamp.utcnow()
+                                     - pd.Timedelta(days=4)).isoformat()
+_traded_long_ago["orders"] = [{"symbol": "KLAC", "shares": 51}]
+b2, st2, tmp2 = run_refresh(_pos, [], seed_state=_traded_long_ago)
+check("a refresh does NOT stamp the last-traded marker",
+      st2["last_full_run"] == _traded_long_ago["last_full_run"],
+      f"marker moved to {st2['last_full_run']}")
+_page = (tmp2 / "index.html").read_text()
+check("and the page says the agent is not trading",
+      "Not trading." in _page,
+      "no banner warning that the trading logic has stopped")
+check("while still showing the figures as current",
+      "Live figures." in _page, "no live-figures banner")
+check("the trading run's own record survives a refresh",
+      [o["symbol"] for o in st2["orders"]] == ["KLAC"], str(st2["orders"]))
+
+# A real run must stamp the marker, or the banner above would fire constantly.
+_b3, _st3 = run(positions=[], orders=[])
+check("a real trading run DOES stamp the last-traded marker",
+      bool(_st3.get("last_full_run")), str(_st3.get("last_full_run")))
+
+# The refresh workflow is the one job NOT gated behind this suite, because a
+# reporter that dies whenever the thing it reports on is broken is worse than
+# no reporter. That is only safe while it cannot submit anything, so the claim
+# is checked here rather than left as a comment in the YAML.
+_seen = {}
+
+
+class _RecordingBroker(FakeBroker):
+    def __init__(self, positions, orders, dry_run=False, **kw):
+        _seen["dry_run"] = dry_run
+        super().__init__(positions, orders, dry_run=dry_run, **kw)
+
+
+_saved_broker = agent_mod.AlpacaBroker
+agent_mod.AlpacaBroker = lambda **kw: _RecordingBroker([], [], **kw)
+run_refresh([], [], broker=None) if False else None
+_tmp_args = argparse.Namespace(symbols="UP", start="2016-01-01", equity=None,
+                               risk=None, refresh=True)
+_t = Path(tempfile.mkdtemp())
+state_mod.STATE_DIR, state_mod.STATE_FILE = _t, _t / "agent_state.json"
+state_mod.EQUITY_FILE, state_mod.RUNLOG_FILE = _t / "e.csv", _t / "r.jsonl"
+from tbot import dashboard as _dm
+_dm.SITE = _t
+agent_mod.write_dashboard = lambda title="Trading agent": (
+    (_t / "index.html").write_text(_dm.build_html(title=title)) or (_t / "index.html"))
+agent_mod.cmd_refresh(_tmp_args)
+agent_mod.AlpacaBroker = _saved_broker
+check("refresh builds its broker in dry-run mode, so it cannot submit",
+      _seen.get("dry_run") is True, f"dry_run={_seen.get('dry_run')}")
+
+# An unreachable broker must not be rendered as an empty account.
+class _DeadBroker(FakeBroker):
+    def account(self):
+        raise _BErr("connection refused")
+
+
+_seed = dict(state_mod.blank_state())
+_seed["positions"] = [{"symbol": "CL", "shares": 224, "avg_entry": 88.24,
+                       "market_value": 19714.24, "unrealized_pl": -51.52}]
+b4, st4, _ = run_refresh([], [], broker=_DeadBroker([], []), seed_state=_seed)
+check("an unreachable broker leaves the previous figures alone",
+      [p["symbol"] for p in st4["positions"]] == ["CL"], str(st4["positions"]))
+check("and says why they were not refreshed",
+      any("broker" in e for e in st4["errors"]), str(st4["errors"]))
+
+
+# ---------------------------------------------------------------------------
 print("\nF. The watchers refuse to trade on a broken picture")
 # ---------------------------------------------------------------------------
 
