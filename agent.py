@@ -234,6 +234,17 @@ def cmd_refresh(args):
     st["refresh_only"] = True
     st["errors"] = []
 
+    # last_full_run was added after the agent had already been trading for
+    # weeks, so the first state file this meets has no such field even though
+    # real runs are all over its history. Without this the page would announce
+    # "no trading run is on record" about an agent that traded yesterday --
+    # technically true of the field, badly wrong about the account. A state
+    # that was written by a real run carries its own timestamp; that IS when
+    # the trading logic last ran, so adopt it once and stop guessing.
+    if not st.get("last_full_run") and prev.get("updated_at"):
+        if not prev.get("refresh_only") and not prev.get("monitor_only"):
+            st["last_full_run"] = prev["updated_at"]
+
     try:
         acct = broker.account()
         positions = broker.positions()

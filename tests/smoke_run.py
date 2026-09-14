@@ -764,7 +764,12 @@ def run_refresh(positions, orders, broker=None, seed_state=None):
     state_mod.EQUITY_FILE = tmp / "equity_history.csv"
     state_mod.RUNLOG_FILE = tmp / "run_log.jsonl"
     if seed_state is not None:
-        state_mod.save_state(dict(seed_state))
+        # Written straight to the file, NOT through save_state, which stamps
+        # updated_at with the current time. These fixtures are about a state
+        # whose timestamps are days old; seeding them through save_state made
+        # every one of them look like it had been written a moment ago.
+        import json as _json
+        state_mod.STATE_FILE.write_text(_json.dumps(dict(seed_state), default=str))
 
     from tbot import dashboard as dash_mod
     dash_mod.SITE = tmp
@@ -822,6 +827,31 @@ check("the trading run's own record survives a refresh",
 _b3, _st3 = run(positions=[], orders=[])
 check("a real trading run DOES stamp the last-traded marker",
       bool(_st3.get("last_full_run")), str(_st3.get("last_full_run")))
+
+# The field was added to a state file that already had weeks of real runs
+# behind it. Announcing "no trading run is on record" about an agent that
+# traded on Thursday is true of the field and wrong about the account.
+_pre_field = dict(state_mod.blank_state())
+_pre_field["updated_at"] = (pd.Timestamp.utcnow() - pd.Timedelta(days=4)).isoformat()
+_pre_field.pop("last_full_run", None)
+b5, st5, tmp5 = run_refresh(_pos, [], seed_state=_pre_field)
+check("a state written before the field existed keeps its real run time",
+      st5["last_full_run"] == _pre_field["updated_at"],
+      f"got {st5['last_full_run']}")
+_p5 = (tmp5 / "index.html").read_text()
+check("so the page says how long since it traded, not that it never did",
+      "Not trading." in _p5 and "no trading run is on record" not in _p5,
+      "still claims the agent has never traded")
+
+# But a refresh's own timestamp must never be mistaken for a run. Adopting it
+# would let the marker creep forward an hour at a time and never go stale.
+_only_refreshes = dict(state_mod.blank_state())
+_only_refreshes["updated_at"] = pd.Timestamp.utcnow().isoformat()
+_only_refreshes["refresh_only"] = True
+_only_refreshes.pop("last_full_run", None)
+_b6, st6, _ = run_refresh(_pos, [], seed_state=_only_refreshes)
+check("a previous refresh is never adopted as a trading run",
+      not st6.get("last_full_run"), str(st6.get("last_full_run")))
 
 # The refresh workflow is the one job NOT gated behind this suite, because a
 # reporter that dies whenever the thing it reports on is broken is worse than
