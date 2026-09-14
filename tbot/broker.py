@@ -177,6 +177,32 @@ class AlpacaBroker:
         """
         out, cutoff = [], None
         seen = set()
+
+        # Working orders first, by their own status, with no date window at
+        # all. The paged sweep below walks the 2000 most recently SUBMITTED
+        # orders, which is a different set: a GTC protective stop stays working
+        # for months while its submitted_at recedes, so on a busy account it
+        # eventually falls off the end of that window and the call returns a
+        # short list with an ordinary 200. It would read as "this position has
+        # no stop", and protect_exposed would stack a second one behind a stop
+        # that was working the whole time -- whichever filled first sells the
+        # position and the other opens a naked short. status=open cannot drop
+        # an order for being old, so it closes that hole; the paged sweep is
+        # still needed because status=open omits the legs of a filled parent.
+        try:
+            live = self._request("GET", "/v2/orders", params={
+                "status": "open", "limit": 500, "nested": "true"})
+            for o in (live if isinstance(live, list) else []):
+                oid = o.get("id")
+                if oid and oid in seen:
+                    continue
+                if oid:
+                    seen.add(oid)
+                out.append(o)
+        except BrokerError:
+            # The paged sweep below is the fallback, not a silent success.
+            pass
+
         for _ in range(4):        # 2000 orders is far more than a day produces
             params = {"status": "all", "limit": 500, "direction": "desc",
                       "nested": "true"}
@@ -509,14 +535,32 @@ class AlpacaBroker:
         """
         if self.dry_run:
             return []
+
+        # Flatten first. open_orders() returns bracket legs NESTED under their
+        # parent, and after the entry fills the parent is the only thing at the
+        # top level -- a filled order, which Alpaca will not cancel. Iterating
+        # the top level therefore attempted exactly one DELETE, got a 422 for
+        # trying to cancel a fill, swallowed it, and returned an empty list
+        # while both live legs kept reserving the shares. The close that
+        # followed was then rejected for insufficient quantity, _restore_stop
+        # found no sell order to read a price from, and the run reported a
+        # fully protected position as naked. Every soft exit -- trend break,
+        # time stop, reversion exit -- failed this way on any position opened
+        # by a bracket, which is all of them.
         killed: List[dict] = []
-        for o in self.open_orders():
-            if o.get("symbol") == symbol and o.get("id"):
-                try:
-                    self._request("DELETE", f"/v2/orders/{o['id']}")
-                    killed.append(o)
-                except BrokerError:
-                    pass   # already filled or cancelled between list and delete
+        from tbot.watch import WORKING_STATUSES, _flatten_orders
+        for o in _flatten_orders(self.open_orders()):
+            if o.get("symbol") != symbol or not o.get("id"):
+                continue
+            # Only working orders can be cancelled. Asking Alpaca to cancel a
+            # fill is a guaranteed 422 that tells us nothing.
+            if str(o.get("status") or "").lower() not in WORKING_STATUSES:
+                continue
+            try:
+                self._request("DELETE", f"/v2/orders/{o['id']}")
+                killed.append(o)
+            except BrokerError:
+                pass   # already filled or cancelled between list and delete
         return killed
 
     def _restore_stop(self, symbol: str, cancelled: List[dict]) -> bool:
@@ -560,8 +604,14 @@ class AlpacaBroker:
         out: Dict[str, str] = {}
         try:
             fills = sorted(self.activities(), key=lambda a: a.get("transaction_time", ""))
-        except BrokerError:
-            return out
+        except BrokerError as exc:
+            # Unknown is not "no positions have an entry date". Every time stop
+            # silently stops applying when this call fails, and the caller had
+            # no way to tell that from "these positions are all new". The
+            # reversion strategy feels it worst: its only exits are a close
+            # above the 10-day average and a 10-session time stop, so a trade
+            # that never bounces has no soft exit left at all.
+            raise BrokerError(f"could not read fill history: {exc}") from exc
         open_qty: Dict[str, int] = {}
         for f in fills:
             sym, side = f.get("symbol"), f.get("side", "")

@@ -741,6 +741,38 @@ check("but it still records the account it did read",
 
 
 # ---------------------------------------------------------------------------
+print("\nE6. An unfilled entry spends exposure before it fills")
+# ---------------------------------------------------------------------------
+# Testing the helper in isolation is not enough: the bug was that the run never
+# ASKED it. Removing the call from _cmd_run left every _pending_notional check
+# green, so this drives the whole run and looks at what it actually bought.
+
+_b_free, _st_free = run(positions=[], orders=[])
+check("with no commitments the run does buy something",
+      len(_b_free.submitted) > 0, str(_b_free.submitted))
+
+# One accepted-but-unfilled entry big enough to use nearly the whole account.
+# It is for a symbol the run is not looking at, so the only thing that can stop
+# the run spending again is the exposure figure.
+_big_pending = [{"id": "big", "symbol": "ZZZ", "side": "buy", "qty": "1000",
+                 "limit_price": "99.00", "status": "accepted"}]
+_b_spent, _st_spent = run(positions=[], orders=_big_pending)
+check("an unfilled entry that used the account leaves nothing to spend twice",
+      _b_spent.submitted == [], str(_b_spent.submitted))
+_bought_free = {o["symbol"] if isinstance(o, dict) else o[0]
+                for o in _b_free.submitted}
+_skipped_spent = {x["symbol"]: str(x.get("reason", ""))
+                  for x in (_st_spent.get("skipped") or [])}
+check("a symbol it would have bought is now turned away instead",
+      bool(_bought_free & set(_skipped_spent)),
+      f"bought free: {_bought_free}; skipped when spent: {set(_skipped_spent)}")
+check("and the reason names the exposure cap, not the share price",
+      any("exposure cap" in r or "no room left" in r
+          for r in _skipped_spent.values()),
+      str(_skipped_spent)[:220])
+
+
+# ---------------------------------------------------------------------------
 print("\nE5. The hourly refresh reports without running anything")
 # ---------------------------------------------------------------------------
 # It exists so the page stops freezing when the agent stops. Its whole value is
@@ -852,6 +884,48 @@ _only_refreshes.pop("last_full_run", None)
 _b6, st6, _ = run_refresh(_pos, [], seed_state=_only_refreshes)
 check("a previous refresh is never adopted as a trading run",
       not st6.get("last_full_run"), str(st6.get("last_full_run")))
+
+# A refresh that cannot reach the broker must not republish old figures under
+# a fresh timestamp. save_state stamps updated_at with the current time, so
+# without marking the carry the page said "0 min ago" about numbers it had
+# just failed to read -- and one 5xx in eight hourly refreshes is routine.
+class _UnreachableOnRefresh(FakeBroker):
+    def account(self):
+        raise _BErr("503 from the broker")
+
+
+_had_figures = dict(state_mod.blank_state())
+_had_figures["updated_at"] = (pd.Timestamp.utcnow() - pd.Timedelta(hours=18)).isoformat()
+_had_figures["last_full_run"] = _had_figures["updated_at"]
+_had_figures["account"] = {"equity": 98400.0, "cash": 100.0, "buying_power": 0.0,
+                           "status": "ACTIVE", "trading_blocked": False,
+                           "mode": "PAPER"}
+_had_figures["positions"] = [{"symbol": "CL", "shares": 224, "avg_entry": 88.24,
+                              "market_value": 19714.24, "unrealized_pl": -51.52}]
+b7, st7, tmp7 = run_refresh([], [], broker=_UnreachableOnRefresh([], []),
+                            seed_state=_had_figures)
+check("a refresh that cannot read the account keeps the old figures",
+      [p["symbol"] for p in st7["positions"]] == ["CL"], str(st7["positions"]))
+check("but dates them instead of passing them off as current",
+      st7.get("carried_from") == _had_figures["updated_at"],
+      f"carried_from={st7.get('carried_from')}")
+_p7 = (tmp7 / "index.html").read_text()
+check("and the page says so out loud",
+      "Carried forward" in _p7, "page presented stale figures as freshly read")
+
+# A monitor must not clear the trading run's errors. protect-now.yml commits
+# state, so clearing them here erased the reason the last run was unhealthy
+# from the record -- and left the failure-streak watcher with nothing to see.
+_failed_run = dict(state_mod.blank_state())
+_failed_run["errors"] = ["drawdown halt: equity is 22.4% below its high"]
+_failed_run["healthy"] = False
+_failed_run["updated_at"] = (pd.Timestamp.utcnow() - pd.Timedelta(hours=18)).isoformat()
+_b8, st8, _ = run_monitor(positions=[], orders=[],
+                          broker=MonitorBroker([], []), seed_state=_failed_run)
+check("a monitor does not erase the trading run's errors",
+      any("drawdown halt" in e for e in st8["errors"]), str(st8["errors"]))
+check("and does not call the account healthy on the strength of its own check",
+      st8["healthy"] is False, f"healthy={st8['healthy']}")
 
 # The refresh workflow is the one job NOT gated behind this suite, because a
 # reporter that dies whenever the thing it reports on is broken is worse than

@@ -181,7 +181,15 @@ def build_html(state: dict = None, history: list = None,
         banner += (f'<div class="banner {cls}"><strong>{label}</strong> '
                    f'{_esc(f.get("message"))}</div>')
 
-    if errors and not findings:
+    # Errors are shown whenever there are errors. This used to be gated on
+    # `not findings`, which was meant to avoid saying the same thing twice --
+    # but the loop above renders only critical and warning findings, so a
+    # findings list holding nothing but a routine INFO note suppressed the
+    # error banner entirely. `check_broker` emits exactly such a note ("new
+    # since last run: ...") on any day the position set changed, which is most
+    # days something happens. The result was that "could not place a stop on
+    # NVDA" rendered as a completely clean page.
+    if errors:
         banner += (f'<div class="banner critical"><strong>Errors on the '
                    f'{"carried-forward" if carried_from else "last"} run.</strong> '
                    + "; ".join(_esc(e) for e in errors[:3]) + '</div>')

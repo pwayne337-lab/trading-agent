@@ -252,8 +252,16 @@ def cmd_refresh(args):
     except BrokerError as exc:
         # Leave the previous figures and say why they were not refreshed. An
         # unreachable broker is not an empty account.
+        #
+        # It has to be MARKED as carried, though. save_state stamps updated_at
+        # with the current time, so simply keeping the old account and
+        # positions republished a stale snapshot under a fresh timestamp: the
+        # page said "0 min ago" about figures it had failed to read. A refresh
+        # that could not reach the broker is exactly when the page most needs
+        # to admit the numbers are old.
         print(f"Cannot reach the broker: {exc}")
         st["errors"].append(f"refresh could not reach the broker: {exc}")
+        _carry_display(st, prev, f"the hourly refresh could not reach the broker ({exc})")
         state.save_state(st)
         write_dashboard()
         return
@@ -317,7 +325,15 @@ def cmd_monitor(args):
     # orders under a timestamp from lunchtime, which reads as though the agent
     # had just placed them.
     st["monitor_only"] = True
-    st["errors"] = []
+    # The trading run's errors are NOT cleared. This check did not rerun the
+    # thing that failed, so it has no evidence the failure is resolved, and
+    # clearing them here made three separate claims that were not true: the
+    # page lost the reason the last run was unhealthy, `healthy` flipped back
+    # to True below, and -- because protect-now.yml commits state -- the next
+    # trading run loaded a previous state with no errors in it, so the
+    # failure-streak warning could never see two bad runs in a row. Its own
+    # errors are appended to that list, not written over it.
+    st["errors"] = list(st.get("errors") or [])
     st["protected"] = []
     # The loop above copies every key blank_state defines, which includes the
     # carry markers an aborted run may have left behind. This check does read
@@ -402,6 +418,9 @@ def cmd_monitor(args):
             findings = look(orders_open)
 
     st["findings"] = [f.to_dict() for f in findings]
+    # Only this check's own outcome is this check's to judge. Carried errors
+    # belong to the run that produced them and still count against health --
+    # a monitor that placed a stop has not fixed a drawdown halt.
     st["healthy"] = not st["errors"]
     # save_state stamps updated_at itself.
 
@@ -581,6 +600,61 @@ _DISPLAY_KEYS = ("account", "positions", "signals", "vetoes", "orders", "exits",
                  "protected", "skipped", "findings", "briefing", "recent_trades")
 
 
+def _pending_notional(open_orders, held_symbols=()) -> float:
+    """What the accepted-but-unfilled BUY orders will cost when they fill.
+
+    Only entries: a sell order reserves shares the account already owns, so
+    counting it would double-charge exposure that `positions` has already
+    reported. Symbols already held are skipped for the same reason -- their
+    market value is in the positions figure.
+
+    A market order has no price on it, so the notional is unknown; those are
+    counted at their stop-loss leg's value when one exists, which understates
+    the cost but by a bounded amount, and skipped when nothing on the order
+    gives a price. Understating is the safe direction: it can only leave the
+    agent with room it did not take.
+    """
+    from tbot.watch import WORKING_STATUSES, _flatten_orders
+    total = 0.0
+    for o in _flatten_orders(open_orders or []):
+        if not str(o.get("side") or "").lower().startswith("buy"):
+            continue
+        if str(o.get("status") or "").lower() not in WORKING_STATUSES:
+            continue
+        sym = o.get("symbol")
+        if not sym or sym in held_symbols:
+            continue
+        try:
+            qty = abs(float(o.get("qty") or 0))
+        except (TypeError, ValueError):
+            continue
+        if qty < 1:
+            continue
+        price = None
+        for key in ("limit_price", "stop_price", "notional", "filled_avg_price"):
+            raw = o.get(key)
+            if raw not in (None, ""):
+                try:
+                    price = abs(float(raw))
+                except (TypeError, ValueError):
+                    price = None
+                if price:
+                    break
+        if not price:
+            for leg in (o.get("legs") or []):
+                raw = leg.get("stop_price") if isinstance(leg, dict) else None
+                if raw not in (None, ""):
+                    try:
+                        price = abs(float(raw))
+                    except (TypeError, ValueError):
+                        price = None
+                    if price:
+                        break
+        if price:
+            total += qty * price
+    return total
+
+
 def _carry_display(st, prev, reason):
     """Copy the last good run's display block onto a run that stopped early.
 
@@ -665,6 +739,11 @@ def _cmd_run(args):
               "This agent trades on completed daily bars. Run it after the "
               "close, or pass --ignore-session to override.")
         st["errors"].append("run attempted during market hours")
+        # Not stamped as a full run. This path did not scan, size or place
+        # anything, so calling it one would keep the "last traded" marker
+        # fresh while nothing traded -- and the clock read can fail on its own
+        # (unknown is treated as open, deliberately), so this is reachable
+        # night after night without a human ever asking for it.
         # Record what the broker already told us. Refusing to trade is not the
         # same as having nothing: without these two lines the saved state keeps
         # blank_state's empty account and position list, and the dashboard
@@ -675,7 +754,13 @@ def _cmd_run(args):
         st["account"] = acct
         st["positions"] = positions
         _carry_display(st, _prev, "the run was started while the market was open")
-        state.save_state(st, full_run=True)
+        # NOT full_run. This path did not scan, size or place anything, so
+        # stamping it would keep the "last traded" marker fresh while nothing
+        # traded. The clock read can fail on its own -- unknown is treated as
+        # open, deliberately -- so this is reachable night after night without
+        # anyone asking for it, and that is exactly the silence the marker
+        # exists to break.
+        state.save_state(st)
         write_dashboard()
         return
 
@@ -705,7 +790,21 @@ def _cmd_run(args):
     pending_only = sorted(working - held)
     held |= working
 
-    gross = sum(p["market_value"] for p in positions)
+    # Filled positions, PLUS the cost of orders that are accepted but not yet
+    # filled. An unfilled entry already counts as a commitment for the
+    # position cap two lines above; leaving it out of the exposure figure let
+    # the two limits disagree about what a position is. A second run before
+    # the open -- which daily.yml allows by hand, and which the comment above
+    # anticipates -- then saw gross = 0 because nothing had filled, handed out
+    # the whole exposure budget a second time, and every order filled at the
+    # open. On a config that forbids margin that is how you end up at 2x.
+    #
+    # A short reports a negative market_value at Alpaca, which would ADD room
+    # here rather than consume it, so size long holdings only. This system
+    # never opens a short; if one exists something is already wrong, and the
+    # answer to that is not to buy more.
+    gross = sum(max(0.0, float(p.get("market_value") or 0.0)) for p in positions)
+    gross += _pending_notional(orders_open, held_symbols={p["symbol"] for p in positions})
     open_count = len(held)
 
     st["account"] = acct
@@ -843,7 +942,18 @@ def _cmd_run(args):
     strat_map = st["strategy_by_symbol"]
 
     closed_today = set()
-    entry_dates = broker.entry_dates() if positions else {}
+    # A failed read here used to come back as an empty dict, which is
+    # indistinguishable from "no position has an entry date" and silently
+    # switched off every time stop for the run. Record it instead: the exits
+    # below still run without it, but the run is no longer called healthy and
+    # the page says which safeguard was not applied.
+    try:
+        entry_dates = broker.entry_dates() if positions else {}
+    except BrokerError as exc:
+        entry_dates = {}
+        st["errors"].append(
+            f"time stops not applied this run: {exc}")
+        print(f"  WARNING: {exc}. Time stops are skipped this run.")
     for p in positions:
         sym = p["symbol"]
         df = bars.get(sym)

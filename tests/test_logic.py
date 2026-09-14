@@ -903,6 +903,101 @@ check("a symbol the batch skipped is fetched on its own rather than dropped",
 
 
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# An error on the page must survive the presence of a routine note. The error
+# banner used to be gated on there being no findings at all, but the loop that
+# renders findings skips INFO -- so one "new since last run: AAPL", which
+# check_broker emits on any day the position set changed, rendered a page with
+# no finding banner AND no error banner. An unprotected position looked like a
+# clean run.
+from tbot import dashboard as _dsh
+_err_acct = {"equity": 98326.16, "cash": 86.31, "buying_power": 0.0,
+             "status": "ACTIVE", "trading_blocked": False, "mode": "PAPER"}
+_err_state = {"mode": "paper", "updated_at": pd.Timestamp.utcnow().isoformat(),
+              "last_full_run": pd.Timestamp.utcnow().isoformat(),
+              "account": _err_acct, "positions": [],
+              "errors": ["could not place a stop on NVDA: 403 insufficient qty"],
+              "findings": [{"severity": "info", "agent": "reconcile",
+                            "message": "new since last run: AAPL"}]}
+_err_page = _dsh.build_html(state=_err_state, history=[])
+check("an error still reaches the page when a routine note is present",
+      "could not place a stop on NVDA" in _err_page,
+      "the error banner was suppressed by an INFO finding")
+check("and it is rendered as a critical banner",
+      'class="banner critical"' in _err_page, "error shown but not as critical")
+
+_no_err = dict(_err_state, errors=[])
+check("a clean run with only a note shows no error banner",
+      "Errors on the" not in _dsh.build_html(state=_no_err, history=[]),
+      "invented an error banner with no errors")
+
+
+# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# A GTC protective stop stays working for months while its submitted_at
+# recedes. The paged sweep walks the most recently SUBMITTED orders, so on a
+# busy account that stop eventually falls off the end of the window and the
+# call returns a short list with an ordinary 200 -- indistinguishable from
+# "this position has no stop". protect_exposed would then stack a second stop
+# behind one that was working all along, and whichever filled first sells the
+# position while the other opens a naked short.
+from tbot.broker import AlpacaBroker as _AB
+
+
+class _AgedOutBroker(_AB):
+    def __init__(self):
+        super().__init__(key="k", secret="s", dry_run=False)
+    def _request(self, method, path, params=None, **kw):
+        if params and params.get("status") == "open":
+            return [{"id": "old-stop", "symbol": "JCI", "side": "sell",
+                     "type": "stop", "qty": "224", "stop_price": "137.17",
+                     "status": "held"}]
+        return [{"id": f"noise{i}", "symbol": "ZZ", "side": "buy",
+                 "status": "canceled"} for i in range(3)]
+
+
+_aged = [o["id"] for o in _AgedOutBroker().open_orders()]
+check("a months-old working stop is still found once it leaves the recent window",
+      "old-stop" in _aged, str(_aged))
+
+
+# ---------------------------------------------------------------------------
+# An unfilled entry counts against the POSITION cap, so it has to count
+# against the EXPOSURE cap too, or the two limits disagree about what a
+# position is. A second run before the open saw no fills, therefore gross = 0,
+# and handed out the whole exposure budget a second time; everything filled at
+# the open at roughly twice the intended size, on a config that forbids margin.
+import agent as _ag
+
+_pending_bracket = [{"id": "p1", "symbol": "KLAC", "side": "buy", "qty": "51",
+                     "status": "accepted",
+                     "legs": [{"id": "l1", "symbol": "KLAC", "side": "sell",
+                               "type": "stop", "qty": "51",
+                               "stop_price": "166.12", "status": "held"}]}]
+check("an accepted entry counts toward exposure before it fills",
+      _ag._pending_notional(_pending_bracket, held_symbols=set()) > 8000,
+      str(_ag._pending_notional(_pending_bracket, held_symbols=set())))
+check("and stops counting once the position is held, not twice",
+      _ag._pending_notional(_pending_bracket, held_symbols={"KLAC"}) == 0.0)
+check("a protective sell order never creates room to buy",
+      _ag._pending_notional(
+          [{"id": "s1", "symbol": "CL", "side": "sell", "qty": "224",
+            "type": "stop", "stop_price": "84.33", "status": "held"}],
+          held_symbols=set()) == 0.0)
+check("a dead order is not charged for",
+      _ag._pending_notional(
+          [{"id": "d", "symbol": "X", "side": "buy", "qty": "10",
+            "limit_price": "50", "status": "canceled"}], held_symbols=set()) == 0.0)
+
+# A short reports a negative market_value at Alpaca. Summing it signed would
+# GRANT room proportional to the size of the short.
+_short_mix = [{"symbol": "LONG", "market_value": 10_000.0},
+              {"symbol": "SHORT", "market_value": -5_000.0}]
+check("a short holding does not hand out extra buying room",
+      sum(max(0.0, float(p.get("market_value") or 0.0)) for p in _short_mix) == 10_000.0)
+
+
+# ---------------------------------------------------------------------------
 print("\n7b-iii. A failed close must not leave a position without a stop")
 # ---------------------------------------------------------------------------
 from tbot.broker import AlpacaBroker, BrokerError as _BErr
@@ -943,6 +1038,77 @@ check("the original stop is put back when the close fails",
 check("the restored order is a stop for the full size",
       _flaky.posted[0]["type"] == "stop" and _flaky.posted[0]["qty"] == "10")
 check("the message says the position is protected", "put back" in _raised)
+
+# The shape above is FLAT, and that is why it passed against code that could
+# not cancel a bracket. Live, open_orders() hands back the legs NESTED under
+# their parent, and once the entry fills the parent is the only thing at the
+# top level -- a filled order, which Alpaca will not cancel. Iterating the top
+# level attempted one DELETE, got a 422 for trying to cancel a fill, swallowed
+# it, and returned nothing while both legs kept reserving the shares. Every
+# soft exit failed that way on every bracket-opened position, and the run then
+# reported a fully protected position as naked.
+_NESTED_PARENT = {
+    "id": "parent", "symbol": "AAA", "side": "buy", "qty": "10",
+    "status": "filled",
+    "legs": [{"id": "leg-tp", "symbol": "AAA", "side": "sell", "type": "limit",
+              "qty": "10", "limit_price": "120.00", "status": "new"},
+             {"id": "leg-stop", "symbol": "AAA", "side": "sell", "type": "stop",
+              "qty": "10", "stop_price": "90.00", "status": "held"}]}
+
+
+class _BracketBroker(_FlakyBroker):
+    """The live shape: legs nested under a parent that has already filled."""
+    def __init__(self, close_ok=True):
+        super().__init__(restore_ok=True)
+        self.close_ok = close_ok
+        self.deleted = []
+    def open_orders(self):
+        return [dict(_NESTED_PARENT)]
+    def _request(self, method, path, **kw):
+        if method == "DELETE" and path.startswith("/v2/orders/"):
+            oid = path.rsplit("/", 1)[-1]
+            self.deleted.append(oid)
+            if oid == "parent":
+                raise _BErr("422: order is not cancelable")
+            return {}
+        if method == "DELETE" and path.startswith("/v2/positions/"):
+            if self.close_ok:
+                return {"qty": "10", "id": "closed", "status": "filled"}
+            raise _BErr("403: insufficient qty available")
+        if method == "POST" and path == "/v2/orders":
+            self.posted.append(kw.get("json"))
+            return {"id": "restored"}
+        raise AssertionError(f"unexpected call {method} {path}")
+
+
+_br = _BracketBroker(close_ok=True)
+_killed = _br.cancel_orders_for("AAA")
+check("a bracket's stop leg is cancelled, not just the parent",
+      "leg-stop" in _br.deleted, str(_br.deleted))
+check("and its target leg too, or the close is refused for held shares",
+      "leg-tp" in _br.deleted, str(_br.deleted))
+check("the filled parent is not pointlessly asked to cancel",
+      "parent" not in _br.deleted, str(_br.deleted))
+check("what it reports cancelling is what it actually cancelled",
+      sorted(o["id"] for o in _killed) == ["leg-stop", "leg-tp"], str(_killed))
+
+_br2 = _BracketBroker(close_ok=True)
+_fill = _br2.close_position("AAA")
+check("so a soft exit on a bracket position actually closes it",
+      _fill.submitted and _fill.shares == 10, str(_fill))
+
+# And the safety net has to be able to read a price out of the nested legs.
+_br3 = _BracketBroker(close_ok=False)
+try:
+    _br3.close_position("AAA")
+    _msg = ""
+except _BErr as exc:
+    _msg = str(exc)
+check("a failed bracket close still puts the real stop back",
+      len(_br3.posted) == 1 and _br3.posted[0]["stop_price"] == 90.0,
+      str(_br3.posted))
+check("and does not call a protected position naked",
+      "put back" in _msg and "no stop order" not in _msg, _msg)
 
 _flaky2 = _FlakyBroker(restore_ok=False)
 try:

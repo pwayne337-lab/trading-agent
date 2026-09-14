@@ -74,7 +74,17 @@ def size_position(equity: float, entry: float, stop: float, cfg_risk, cfg_strate
     shares = int(math.floor(min(raw_shares, shares_by_notional, shares_by_room)))
 
     if shares < 1:
-        empty.rejected_reason = "position would be less than one share"
+        # Say which ceiling actually bound. "Less than one share" about SPY
+        # reads as something wrong with SPY, when the real answer is that the
+        # account is fully invested and there is nothing left to buy with --
+        # a different situation needing a different decision from the reader.
+        if shares_by_room <= shares_by_notional and shares_by_room < 1:
+            pct = (cfg_risk.max_gross_exposure or 0) * 100
+            empty.rejected_reason = (
+                f"no room left: ${room:,.0f} of the {pct:.0f}% exposure cap is "
+                f"unspent, which will not buy one share at ${entry:,.2f}")
+        else:
+            empty.rejected_reason = "position would be less than one share"
         return empty
 
     # The caps above are ceilings, so whatever candidate is sized last gets the
@@ -88,10 +98,20 @@ def size_position(equity: float, entry: float, stop: float, cfg_risk, cfg_strate
     if floor > 0:
         min_risk = dollars_to_risk * floor
         if shares * risk_per_share < min_risk:
+            # Same distinction as above. A trade can come out undersized
+            # because the setup's stop is wide, or because the account is
+            # nearly fully invested and this candidate got the scraps. Those
+            # need different responses from whoever reads the page, so they
+            # should not share one sentence.
+            why = ""
+            if shares_by_room <= min(raw_shares, shares_by_notional):
+                pct = (cfg_risk.max_gross_exposure or 0) * 100
+                why = (f" -- only ${room:,.0f} of the {pct:.0f}% exposure cap "
+                       f"was left to size it with")
             empty.rejected_reason = (
                 f"risking ${shares * risk_per_share:,.2f}, under the "
                 f"${min_risk:,.2f} minimum for a trade "
-                f"({floor * 100:.0f}% of a normal position)")
+                f"({floor * 100:.0f}% of a normal position){why}")
             return empty
 
     target = entry + cfg_strategy.reward_risk * risk_per_share
