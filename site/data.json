@@ -1,10 +1,10 @@
 {
-  "updated_at": "2026-09-14T20:13:59+00:00",
+  "updated_at": "2026-09-14T23:56:17+00:00",
   "carried_from": null,
-  "last_full_run": null,
+  "last_full_run": "2026-09-14T23:56:17+00:00",
   "refresh_only": false,
   "mode": "paper",
-  "equity": 99118.74,
+  "equity": 99006.78,
   "positions": 8,
-  "orders": 3
+  "orders": 2
 }

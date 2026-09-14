@@ -1,11 +1,11 @@
 {
-  "updated_at": "2026-09-14T20:13:59+00:00",
+  "updated_at": "2026-09-14T23:56:17+00:00",
   "mode": "paper",
-  "healthy": false,
+  "healthy": true,
   "account": {
-    "equity": 99118.74,
+    "equity": 99006.78,
     "cash": 320.54,
-    "buying_power": 277917.13,
+    "buying_power": 277603.62,
     "status": "ACTIVE",
     "pattern_day_trader": null,
     "trading_blocked": false,
@@ -16,15 +16,15 @@
       "symbol": "AAPL",
       "shares": 56,
       "avg_entry": 327.423929,
-      "market_value": 18649.204,
-      "unrealized_pl": 313.463976
+      "market_value": 18613.476,
+      "unrealized_pl": 277.735976
     },
     {
       "symbol": "ABNB",
       "shares": 71,
       "avg_entry": 167.804789,
-      "market_value": 12116.15,
-      "unrealized_pl": 202.009981
+      "market_value": 12055.8,
+      "unrealized_pl": 141.659981
     },
     {
       "symbol": "ABT",
@@ -37,22 +37,22 @@
       "symbol": "ADP",
       "shares": 35,
       "avg_entry": 267.998286,
-      "market_value": 9682.05,
-      "unrealized_pl": 302.10999
+      "market_value": 9682.75,
+      "unrealized_pl": 302.80999
     },
     {
       "symbol": "AMGN",
       "shares": 33,
       "avg_entry": 383.8,
-      "market_value": 12573.0,
-      "unrealized_pl": -92.4
+      "market_value": 12556.5,
+      "unrealized_pl": -108.9
     },
     {
       "symbol": "AMZN",
       "shares": 1,
       "avg_entry": 250.27,
-      "market_value": 253.59,
-      "unrealized_pl": 3.32
+      "market_value": 253.5,
+      "unrealized_pl": 3.23
     },
     {
       "symbol": "APD",
@@ -71,227 +71,168 @@
   ],
   "signals": [
     {
-      "symbol": "AAPL",
-      "entry": 326.57,
-      "stop": 309.1107,
-      "target": 361.4886,
-      "shares": 56,
+      "symbol": "AMAT",
+      "entry": 424.21,
+      "stop": 367.9647,
+      "target": 536.7006,
+      "shares": 17,
+      "strategy": "reversion",
+      "why": "RSI(2) at 7, below the 10-day average; stop 2.50x ATR below entry"
+    },
+    {
+      "symbol": "DDOG",
+      "entry": 230.05,
+      "stop": 201.9852,
+      "target": 286.1796,
+      "shares": 12,
       "strategy": "pullback",
-      "why": "pullback to the 20 EMA, reclaimed; stop 2.21x ATR below entry"
-    },
-    {
-      "symbol": "AMGN",
-      "entry": 382.47,
-      "stop": 353.4418,
-      "target": 440.5264,
-      "shares": 33,
-      "strategy": "reversion",
-      "why": "RSI(2) at 2, below the 10-day average; stop 2.50x ATR below entry"
-    },
-    {
-      "symbol": "APD",
-      "entry": 293.65,
-      "stop": 278.465,
-      "target": 324.02,
-      "shares": 39,
-      "strategy": "reversion",
-      "why": "RSI(2) at 3, below the 10-day average; stop 2.50x ATR below entry"
+      "why": "pullback to the 20 EMA, reclaimed; stop 2.24x ATR below entry"
     }
   ],
   "vetoes": [],
   "orders": [
     {
-      "symbol": "AAPL",
-      "shares": 56,
-      "stop": 309.1107,
-      "target": 361.4886,
-      "dollars_at_risk": 977.72,
-      "order_id": "7b9cd5ff-3b5f-4747-a06b-ee5032c232dd",
+      "symbol": "AMAT",
+      "shares": 17,
+      "stop": 367.9647,
+      "target": 536.7006,
+      "dollars_at_risk": 956.17,
+      "order_id": "6be61c54-2af7-4c37-ba30-1f690b161117",
+      "strategy": "reversion"
+    },
+    {
+      "symbol": "DDOG",
+      "shares": 12,
+      "stop": 201.9852,
+      "target": 286.1796,
+      "dollars_at_risk": 336.78,
+      "order_id": "49ea30df-d414-44a6-991d-0099846c9a02",
       "strategy": "pullback"
-    },
-    {
-      "symbol": "AMGN",
-      "shares": 33,
-      "stop": 353.4418,
-      "target": 440.5264,
-      "dollars_at_risk": 957.93,
-      "order_id": "5d7ef70e-ff63-4287-a855-f6c6420fda3c",
-      "strategy": "reversion"
-    },
-    {
-      "symbol": "APD",
-      "shares": 39,
-      "stop": 278.465,
-      "target": 324.02,
-      "dollars_at_risk": 592.21,
-      "order_id": "f28fcfff-c8ed-403b-a89a-af0d946e681a",
-      "strategy": "reversion"
     }
   ],
   "exits": [
     {
-      "symbol": "JCI",
-      "reason": "trend break: closed at $142.81, below the 50-day average of $144.75",
+      "symbol": "ADP",
+      "reason": "bounce complete: closed at $276.63, back above the 10-day average of $274.33",
       "status": "accepted",
-      "unrealized_pl": -462.08
-    },
-    {
-      "symbol": "QQQ",
-      "reason": "trend break: closed at $708.69, below the 50-day average of $710.61",
-      "status": "accepted",
-      "unrealized_pl": -369.58
+      "unrealized_pl": 302.80999
     }
   ],
   "protected": [],
   "skipped": [
     {
-      "symbol": "BLK",
-      "reason": "position would be less than one share"
+      "symbol": "BAC",
+      "reason": "risking $148.47, under the $247.52 minimum for a trade (25% of a normal position) -- only $2,792 of the 100% exposure cap was left to size it with"
     },
     {
-      "symbol": "BMY",
-      "reason": "risking $3.74, under the $245.82 minimum for a trade (25% of a normal position)"
+      "symbol": "CB",
+      "reason": "risking $78.39, under the $247.52 minimum for a trade (25% of a normal position) -- only $2,792 of the 100% exposure cap was left to size it with"
     },
     {
-      "symbol": "CI",
-      "reason": "position would be less than one share"
+      "symbol": "CMG",
+      "reason": "risking $111.35, under the $247.52 minimum for a trade (25% of a normal position) -- only $2,792 of the 100% exposure cap was left to size it with"
     },
     {
-      "symbol": "COF",
-      "reason": "position would be less than one share"
-    },
-    {
-      "symbol": "CRM",
-      "reason": "position would be less than one share"
-    },
-    {
-      "symbol": "CTAS",
-      "reason": "position would be less than one share"
-    },
-    {
-      "symbol": "DIA",
-      "reason": "position would be less than one share"
-    },
-    {
-      "symbol": "EFA",
-      "reason": "position would be less than one share"
-    },
-    {
-      "symbol": "GE",
-      "reason": "position would be less than one share"
+      "symbol": "FCX",
+      "reason": "no room left: $31 of the 100% exposure cap is unspent, which will not buy one share at $69.34"
     },
     {
       "symbol": "GILD",
-      "reason": "position would be less than one share"
+      "reason": "no room left: $31 of the 100% exposure cap is unspent, which will not buy one share at $146.41"
     },
     {
       "symbol": "GM",
-      "reason": "position would be less than one share"
+      "reason": "no room left: $31 of the 100% exposure cap is unspent, which will not buy one share at $87.16"
+    },
+    {
+      "symbol": "GOOGL",
+      "reason": "no room left: $31 of the 100% exposure cap is unspent, which will not buy one share at $349.39"
     },
     {
       "symbol": "HYG",
-      "reason": "position would be less than one share"
+      "reason": "no room left: $31 of the 100% exposure cap is unspent, which will not buy one share at $78.53"
     },
     {
-      "symbol": "IBB",
-      "reason": "position would be less than one share"
+      "symbol": "KO",
+      "reason": "no room left: $31 of the 100% exposure cap is unspent, which will not buy one share at $89.35"
     },
     {
-      "symbol": "IWM",
-      "reason": "position would be less than one share"
+      "symbol": "LRCX",
+      "reason": "no room left: $31 of the 100% exposure cap is unspent, which will not buy one share at $273.49"
     },
     {
-      "symbol": "LLY",
-      "reason": "position would be less than one share"
-    },
-    {
-      "symbol": "MA",
-      "reason": "position would be less than one share"
-    },
-    {
-      "symbol": "MDY",
-      "reason": "position would be less than one share"
-    },
-    {
-      "symbol": "MET",
-      "reason": "position would be less than one share"
-    },
-    {
-      "symbol": "MMM",
-      "reason": "position would be less than one share"
-    },
-    {
-      "symbol": "MRK",
-      "reason": "position would be less than one share"
+      "symbol": "MU",
+      "reason": "no room left: $31 of the 100% exposure cap is unspent, which will not buy one share at $924.03"
     },
     {
       "symbol": "NVDA",
-      "reason": "position would be less than one share"
+      "reason": "no room left: $31 of the 100% exposure cap is unspent, which will not buy one share at $210.96"
     },
     {
-      "symbol": "PFE",
-      "reason": "risking $2.85, under the $245.82 minimum for a trade (25% of a normal position)"
+      "symbol": "PANW",
+      "reason": "no room left: $31 of the 100% exposure cap is unspent, which will not buy one share at $373.94"
     },
     {
-      "symbol": "PM",
-      "reason": "position would be less than one share"
+      "symbol": "RTX",
+      "reason": "no room left: $31 of the 100% exposure cap is unspent, which will not buy one share at $195.34"
     },
     {
-      "symbol": "REGN",
-      "reason": "position would be less than one share"
-    },
-    {
-      "symbol": "RSP",
-      "reason": "position would be less than one share"
-    },
-    {
-      "symbol": "SBUX",
-      "reason": "position would be less than one share"
+      "symbol": "SLB",
+      "reason": "no room left: $31 of the 100% exposure cap is unspent, which will not buy one share at $53.32"
     },
     {
       "symbol": "SPOT",
-      "reason": "position would be less than one share"
-    },
-    {
-      "symbol": "SPY",
-      "reason": "position would be less than one share"
+      "reason": "no room left: $31 of the 100% exposure cap is unspent, which will not buy one share at $556.31"
     },
     {
       "symbol": "TGT",
-      "reason": "position would be less than one share"
+      "reason": "no room left: $31 of the 100% exposure cap is unspent, which will not buy one share at $158.70"
     },
     {
       "symbol": "V",
-      "reason": "position would be less than one share"
-    },
-    {
-      "symbol": "VRTX",
-      "reason": "position would be less than one share"
+      "reason": "no room left: $31 of the 100% exposure cap is unspent, which will not buy one share at $375.28"
     },
     {
       "symbol": "WDAY",
-      "reason": "position would be less than one share"
-    },
-    {
-      "symbol": "XLB",
-      "reason": "risking $2.06, under the $245.82 minimum for a trade (25% of a normal position)"
-    },
-    {
-      "symbol": "XLP",
-      "reason": "position would be less than one share"
-    },
-    {
-      "symbol": "XLRE",
-      "reason": "risking $1.33, under the $245.82 minimum for a trade (25% of a normal position)"
-    },
-    {
-      "symbol": "XLV",
-      "reason": "position would be less than one share"
+      "reason": "no room left: $31 of the 100% exposure cap is unspent, which will not buy one share at $194.21"
     }
   ],
-  "findings": [],
+  "findings": [
+    {
+      "severity": "info",
+      "agent": "watchdog",
+      "message": "the previous run (2026-09-14) ended with 1 error(s), since resolved: could not read working orders: GET /v2/orders failed to reach the broker:..."
+    }
+  ],
   "briefing": "Research is off. Add ANTHROPIC_API_KEY to your .env file to get a written briefing here.",
   "recent_trades": [
+    {
+      "symbol": "JCI",
+      "closed": "2026-09-11",
+      "shares": 26,
+      "avg_cost": 146.42,
+      "exit": 144.0,
+      "pnl": -62.92,
+      "reason": "sold"
+    },
+    {
+      "symbol": "JCI",
+      "closed": "2026-09-11",
+      "shares": 102,
+      "avg_cost": 146.42,
+      "exit": 144.0,
+      "pnl": -246.84,
+      "reason": "sold"
+    },
+    {
+      "symbol": "QQQ",
+      "closed": "2026-09-11",
+      "shares": 34,
+      "avg_cost": 718.85,
+      "exit": 714.98,
+      "pnl": -131.58,
+      "reason": "sold"
+    },
     {
       "symbol": "KLAC",
       "closed": "2026-09-09",
@@ -320,26 +261,24 @@
       "reason": "sold"
     }
   ],
-  "errors": [
-    "could not read working orders: GET /v2/orders failed to reach the broker: HTTPSConnectionPool(host='paper-api.alpaca.markets', port=443): Read timed out. (read timeout=20)"
-  ],
-  "last_full_run": null,
+  "errors": [],
+  "last_full_run": "2026-09-14T23:56:17+00:00",
   "carried_from": null,
   "carried_reason": "",
   "strategy_by_symbol": {
     "CL": "reversion",
     "ABNB": "reversion",
     "ABT": "reversion",
-    "ADP": "reversion",
     "AMZN": "reversion",
     "AAPL": "pullback",
     "AMGN": "reversion",
-    "APD": "reversion"
+    "APD": "reversion",
+    "AMAT": "reversion",
+    "DDOG": "pullback"
   },
   "research": {
     "llm_calls": 0,
     "llm_errors": 0,
     "enabled": false
-  },
-  "monitor_only": true
+  }
 }
