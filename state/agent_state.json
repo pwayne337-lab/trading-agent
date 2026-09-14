@@ -1,11 +1,11 @@
 {
-  "updated_at": "2026-09-10T23:19:50+00:00",
+  "updated_at": "2026-09-14T20:13:59+00:00",
   "mode": "paper",
-  "healthy": true,
+  "healthy": false,
   "account": {
-    "equity": 98326.16,
-    "cash": 86.31,
-    "buying_power": 275416.82,
+    "equity": 99118.74,
+    "cash": 320.54,
+    "buying_power": 277917.13,
     "status": "ACTIVE",
     "pattern_day_trader": null,
     "trading_blocked": false,
@@ -13,53 +13,60 @@
   },
   "positions": [
     {
+      "symbol": "AAPL",
+      "shares": 56,
+      "avg_entry": 327.423929,
+      "market_value": 18649.204,
+      "unrealized_pl": 313.463976
+    },
+    {
       "symbol": "ABNB",
       "shares": 71,
       "avg_entry": 167.804789,
-      "market_value": 11913.8,
-      "unrealized_pl": -0.340019
+      "market_value": 12116.15,
+      "unrealized_pl": 202.009981
     },
     {
       "symbol": "ABT",
       "shares": 142,
       "avg_entry": 104.877324,
-      "market_value": 14677.12,
-      "unrealized_pl": -215.460008
+      "market_value": 14638.78,
+      "unrealized_pl": -253.800008
     },
     {
       "symbol": "ADP",
       "shares": 35,
       "avg_entry": 267.998286,
-      "market_value": 9356.55,
-      "unrealized_pl": -23.39001
+      "market_value": 9682.05,
+      "unrealized_pl": 302.10999
+    },
+    {
+      "symbol": "AMGN",
+      "shares": 33,
+      "avg_entry": 383.8,
+      "market_value": 12573.0,
+      "unrealized_pl": -92.4
     },
     {
       "symbol": "AMZN",
       "shares": 1,
       "avg_entry": 250.27,
-      "market_value": 251.78,
-      "unrealized_pl": 1.51
+      "market_value": 253.59,
+      "unrealized_pl": 3.32
+    },
+    {
+      "symbol": "APD",
+      "shares": 39,
+      "avg_entry": 295.0,
+      "market_value": 11198.07,
+      "unrealized_pl": -306.93
     },
     {
       "symbol": "CL",
       "shares": 224,
       "avg_entry": 88.24,
-      "market_value": 19689.6,
-      "unrealized_pl": -76.16
-    },
-    {
-      "symbol": "JCI",
-      "shares": 128,
-      "avg_entry": 146.42,
-      "market_value": 18279.68,
-      "unrealized_pl": -462.08
-    },
-    {
-      "symbol": "QQQ",
-      "shares": 34,
-      "avg_entry": 718.85,
-      "market_value": 24071.32,
-      "unrealized_pl": -369.58
+      "market_value": 19687.36,
+      "unrealized_pl": -78.4
     }
   ],
   "signals": [
@@ -313,7 +320,10 @@
       "reason": "sold"
     }
   ],
-  "errors": [],
+  "errors": [
+    "could not read working orders: GET /v2/orders failed to reach the broker: HTTPSConnectionPool(host='paper-api.alpaca.markets', port=443): Read timed out. (read timeout=20)"
+  ],
+  "last_full_run": null,
   "carried_from": null,
   "carried_reason": "",
   "strategy_by_symbol": {
@@ -330,5 +340,6 @@
     "llm_calls": 0,
     "llm_errors": 0,
     "enabled": false
-  }
+  },
+  "monitor_only": true
 }
