@@ -234,16 +234,7 @@ def cmd_refresh(args):
     st["refresh_only"] = True
     st["errors"] = []
 
-    # last_full_run was added after the agent had already been trading for
-    # weeks, so the first state file this meets has no such field even though
-    # real runs are all over its history. Without this the page would announce
-    # "no trading run is on record" about an agent that traded yesterday --
-    # technically true of the field, badly wrong about the account. A state
-    # that was written by a real run carries its own timestamp; that IS when
-    # the trading logic last ran, so adopt it once and stop guessing.
-    if not st.get("last_full_run") and prev.get("updated_at"):
-        if not prev.get("refresh_only") and not prev.get("monitor_only"):
-            st["last_full_run"] = prev["updated_at"]
+    _adopt_legacy_marker(st, prev)
 
     try:
         acct = broker.account()
@@ -267,7 +258,7 @@ def cmd_refresh(args):
         return
 
     st["account"] = acct
-    st["positions"] = positions
+    st["positions"] = _attach_protection(positions, orders_open)
     st["carried_from"] = None      # freshly measured, not carried
     st["carried_reason"] = ""
 
@@ -325,6 +316,7 @@ def cmd_monitor(args):
     # orders under a timestamp from lunchtime, which reads as though the agent
     # had just placed them.
     st["monitor_only"] = True
+    _adopt_legacy_marker(st, prev)
     # The trading run's errors are NOT cleared. This check did not rerun the
     # thing that failed, so it has no evidence the failure is resolved, and
     # clearing them here made three separate claims that were not true: the
@@ -376,7 +368,7 @@ def cmd_monitor(args):
         return
 
     st["account"] = acct
-    st["positions"] = positions
+    st["positions"] = _attach_protection(positions, orders_open)
     equity = acct["equity"]
     print(f"Account: {acct['mode']}  equity ${equity:,.2f}")
     print(f"Holding {len(positions)}: "
@@ -600,6 +592,50 @@ _DISPLAY_KEYS = ("account", "positions", "signals", "vetoes", "orders", "exits",
                  "protected", "skipped", "findings", "briefing", "recent_trades")
 
 
+def _adopt_legacy_marker(st, prev):
+    """Carry a pre-field state's own timestamp into last_full_run, once.
+
+    The field was added after the agent had been trading for weeks, so the
+    first state file it meets has real runs all over its history and no such
+    field. Without this the page announces "no trading run is on record" about
+    an agent that traded yesterday: true of the field, badly wrong about the
+    account, and it fires the one banner built to mean the agent is dead.
+
+    Only a state written by a REAL run is adopted. A refresh or a monitor
+    timestamp would let the marker creep forward every hour and never be able
+    to go stale, which is the failure the marker exists to catch.
+
+    Shared by the refresh and the mid-session check because only the refresh
+    had it, so a monitor state -- which protect-now.yml commits every weekday
+    -- left the field empty and permanently defeated the adoption for every
+    later refresh.
+    """
+    if st.get("last_full_run") or not (prev or {}).get("updated_at"):
+        return st
+    if prev.get("refresh_only") or prev.get("monitor_only"):
+        return st
+    st["last_full_run"] = prev["updated_at"]
+    return st
+
+
+def _attach_protection(positions, orders_open):
+    """Record each position's working stop and target onto the position itself.
+
+    The broker knows what is protecting a position; the state file did not, so
+    the page could say what a holding was worth but not how much of that was
+    still at risk. Attached in every path that reads the order book -- the
+    trading run, the mid-session check and the hourly refresh -- so the page
+    carries it whether or not the agent traded today.
+    """
+    prot = watch.protection_for(positions, orders_open)
+    for p in (positions or []):
+        rec = prot.get(p.get("symbol")) or {}
+        p["stop"] = rec.get("stop")
+        p["target"] = rec.get("target")
+        p["stop_shares"] = rec.get("stop_shares", 0)
+    return positions
+
+
 def _pending_notional(open_orders, held_symbols=()) -> float:
     """What the accepted-but-unfilled BUY orders will cost when they fill.
 
@@ -808,7 +844,7 @@ def _cmd_run(args):
     open_count = len(held)
 
     st["account"] = acct
-    st["positions"] = positions
+    st["positions"] = _attach_protection(positions, orders_open)
     print(f"Account: {acct['mode']}  equity ${equity:,.2f}  "
           f"buying power ${acct['buying_power']:,.2f}")
     print(f"Committed to {open_count}: {sorted(held) or 'nothing'}")

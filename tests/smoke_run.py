@@ -316,7 +316,13 @@ def run_monitor(positions, orders, submit=True, broker=None, seed_state=None):
     state_mod.RUNLOG_FILE = tmp / "run_log.jsonl"
 
     if seed_state is not None:
-        state_mod.save_state(dict(seed_state))
+        # Straight to the file, not through save_state, which stamps
+        # updated_at with the current time. These fixtures are about states
+        # whose timestamps are hours old; seeding them through save_state made
+        # every one look like it had been written a moment ago, which is how a
+        # check written to catch a real bug passed against code that had it.
+        import json as _json
+        state_mod.STATE_FILE.write_text(_json.dumps(dict(seed_state), default=str))
 
     from tbot import dashboard as dash_mod
     dash_mod.SITE = tmp
@@ -926,6 +932,41 @@ check("a monitor does not erase the trading run's errors",
       any("drawdown halt" in e for e in st8["errors"]), str(st8["errors"]))
 check("and does not call the account healthy on the strength of its own check",
       st8["healthy"] is False, f"healthy={st8['healthy']}")
+
+# A monitor must adopt a legacy state's timestamp too. Only the refresh did,
+# and protect-now.yml commits a monitor state every weekday -- which left the
+# field empty with monitor_only set, so every later refresh refused to adopt
+# and the page permanently claimed the agent had never traded.
+_legacy = dict(state_mod.blank_state())
+_legacy["updated_at"] = (pd.Timestamp.utcnow() - pd.Timedelta(hours=20)).isoformat()
+_legacy.pop("last_full_run", None)
+_b9, st9, tmp9 = run_monitor(positions=[], orders=[],
+                             broker=MonitorBroker([], []), seed_state=_legacy)
+check("a monitor adopts a real run's timestamp as the last-traded marker",
+      st9.get("last_full_run") == _legacy["updated_at"],
+      f"got {st9.get('last_full_run')}")
+_p9 = (tmp9 / "index.html").read_text()
+check("so the page does not claim it has never traded",
+      "no trading run is on record" not in _p9,
+      "page still claims the agent has never traded")
+
+# Positions must carry what is protecting them, so the page can show how much
+# of a holding is still at risk without asking the broker itself.
+_prot_pos = [{"symbol": "UP", "shares": 10, "avg_entry": 100.0,
+              "market_value": 1200.0, "unrealized_pl": 200.0}]
+_prot_orders = [{"id": "s1", "symbol": "UP", "side": "sell", "type": "stop",
+                 "qty": "10", "stop_price": "90.00", "status": "held"},
+                {"id": "t1", "symbol": "UP", "side": "sell", "type": "limit",
+                 "qty": "10", "limit_price": "140.00", "status": "new"}]
+_b10, st10, _ = run_refresh(_prot_pos, _prot_orders,
+                            broker=FakeBroker(_prot_pos, _prot_orders, dry_run=True))
+_held = (st10.get("positions") or [{}])[0]
+check("a position records the stop working behind it",
+      _held.get("stop") == 90.0, str(_held))
+check("and the target it is aiming at",
+      _held.get("target") == 140.0, str(_held))
+check("and how many shares that stop actually covers",
+      _held.get("stop_shares") == 10, str(_held))
 
 # The refresh workflow is the one job NOT gated behind this suite, because a
 # reporter that dies whenever the thing it reports on is broken is worse than

@@ -311,6 +311,200 @@ def build_html(state: dict = None, history: list = None,
     else:
         trades_block = '<div class="card empty">No closed trades yet.</div>'
 
+    # -- positions in detail (its own tab) -----------------------------------
+    # The overview answers "what do I hold and is it up". This answers the
+    # question you actually act on: how much of that is still at risk, and how
+    # far the price has to fall before the agent is out.
+    strat_of = state.get("strategy_by_symbol") or {}
+    if positions:
+        rows = []
+        for p in positions:
+            sym = _esc(p.get("symbol"))
+            shares = float(p.get("shares") or 0)
+            entry = float(p.get("avg_entry") or 0)
+            value = float(p.get("market_value") or 0)
+            pl = float(p.get("unrealized_pl") or 0)
+            last = value / shares if shares else 0.0
+            stop = p.get("stop")
+            target = p.get("target")
+            strat = _esc(strat_of.get(p.get("symbol"), ""))
+
+            if stop:
+                stop = float(stop)
+                to_stop = (last - stop) / last * 100 if last else 0.0
+                at_risk = max(0.0, (last - stop) * shares)
+                initial = (entry - stop) * shares
+                r_mult = (pl / initial) if initial > 0 else None
+                stop_cell = f"${stop:,.2f}"
+                dist_cell = f"{to_stop:,.1f}%"
+                risk_cell = f"${at_risk:,.0f}"
+                r_cell = f"{r_mult:+.2f}R" if r_mult is not None else "&mdash;"
+                cov = int(p.get("stop_shares") or 0)
+                if cov and shares and cov < shares:
+                    stop_cell += (f" <span class='warn-inline'>covers {cov} of "
+                                  f"{int(shares)}</span>")
+            else:
+                # Not cosmetic. No working stop is the one thing on this page
+                # that needs acting on today, so it is said in words.
+                stop_cell = "<span class='warn-inline'>none</span>"
+                dist_cell = risk_cell = r_cell = "&mdash;"
+
+            tag = f' <span class="tag">{strat}</span>' if strat else ""
+            rows.append(
+                f"<tr><td><strong>{sym}</strong>{tag}</td>"
+                f"<td class='n'>{int(shares)}</td>"
+                f"<td class='n'>${entry:,.2f}</td>"
+                f"<td class='n'>${last:,.2f}</td>"
+                f"<td class='n'>{stop_cell}</td>"
+                f"<td class='n'>{dist_cell}</td>"
+                f"<td class='n'>{risk_cell}</td>"
+                f"<td class='n'>{r_cell}</td>"
+                f"<td class='n {'pos' if pl >= 0 else 'neg'}'>${pl:+,.2f}</td></tr>")
+        detail_block = (
+            '<div class="card scroll"><table><thead><tr><th>Symbol</th>'
+            '<th class="n">Shares</th><th class="n">Entry</th><th class="n">Last</th>'
+            '<th class="n">Stop</th><th class="n">To stop</th>'
+            '<th class="n">At risk</th><th class="n">R</th>'
+            '<th class="n">Open P&amp;L</th></tr></thead><tbody>'
+            + "".join(rows) + '</tbody></table></div>'
+            + '<p class="note">"At risk" is what this position loses from here if '
+              'its stop is hit. "R" is the profit measured in units of the risk '
+              'originally taken, so +1R means it has made back exactly what it '
+              'was prepared to lose.</p>')
+    else:
+        detail_block = '<div class="card empty">Holding nothing right now.</div>'
+
+    # -- performance (its own tab) -------------------------------------------
+    # Every number here is counted from closed trades only. Open positions have
+    # no result yet, and mixing them in is how a losing run gets told as a
+    # winning one.
+    closed = [t for t in (state.get("recent_trades") or [])
+              if t.get("pnl") is not None]
+    if closed:
+        pnls = [float(t.get("pnl") or 0) for t in closed]
+        wins = [x for x in pnls if x > 0]
+        losses = [x for x in pnls if x < 0]
+        gross_win, gross_loss = sum(wins), abs(sum(losses))
+        pf = (gross_win / gross_loss) if gross_loss else None
+        stat_tiles = "".join([
+            _tile("Closed trades", str(len(closed))),
+            _tile("Win rate", f"{len(wins) / len(closed) * 100:,.0f}%",
+                  f"{len(wins)} of {len(closed)}"),
+            _tile("Net P&L", f"${sum(pnls):+,.2f}",
+                  tone="good" if sum(pnls) >= 0 else "bad"),
+            _tile("Average win", f"${(gross_win / len(wins)) if wins else 0:,.2f}"),
+            _tile("Average loss", f"${-(gross_loss / len(losses)) if losses else 0:,.2f}"),
+            _tile("Profit factor", f"{pf:,.2f}" if pf else "&mdash;",
+                  "made per $1 lost"),
+        ])
+        by = {}
+        for t in closed:
+            key = str(t.get("reason") or "unknown")
+            b = by.setdefault(key, {"n": 0, "pnl": 0.0})
+            b["n"] += 1
+            b["pnl"] += float(t.get("pnl") or 0)
+        by_rows = "".join(
+            f"<tr><td>{_esc(k)}</td><td class='n'>{v['n']}</td>"
+            f"<td class='n {'pos' if v['pnl'] >= 0 else 'neg'}'>"
+            f"${v['pnl']:+,.2f}</td></tr>"
+            for k, v in sorted(by.items(), key=lambda kv: -abs(kv[1]["pnl"])))
+        perf_block = (
+            f'<div class="tiles">{stat_tiles}</div>'
+            f'<h3>By exit reason</h3>'
+            f'<div class="card scroll"><table><thead><tr><th>Why it closed</th>'
+            f'<th class="n">Trades</th><th class="n">P&amp;L</th></tr></thead>'
+            f'<tbody>{by_rows}</tbody></table></div>'
+            f'<p class="note">Counted from the {len(closed)} closed trades on '
+            f'record. That is far too few to judge a strategy by &mdash; a run '
+            f'of luck either way swamps it at this size. Treat it as a record '
+            f'of what happened, not evidence of what will.</p>')
+    else:
+        perf_block = ('<div class="card empty">No closed trades yet. This fills '
+                      'in as positions are exited.</div>')
+
+    # -- the rules (its own tab) ---------------------------------------------
+    # Generated from the live config object, not written out by hand, so it
+    # cannot drift from what the agent actually does. Change a setting and this
+    # page changes with it.
+    try:
+        from tbot.config import AgentConfig
+        from tbot.strategy import PLAYBOOK
+        cfg = AgentConfig()
+        r, sc = cfg.risk, cfg.strategy
+
+        def _rule(label, value, why):
+            return (f'<tr><td>{_esc(label)}</td><td class="n"><strong>'
+                    f'{_esc(value)}</strong></td><td class="why">{_esc(why)}</td></tr>')
+
+        money = "".join([
+            _rule("Risked per trade", f"{r.risk_per_trade * 100:g}% of the account",
+                  "A full stop-out costs this much of the account, not this much "
+                  "of the position. Every position is sized backwards from it."),
+            _rule("Largest single position", f"{r.max_position_pct * 100:g}% of equity",
+                  "A very tight stop would otherwise size you into a position so "
+                  "large that one overnight gap does real damage."),
+            _rule("Most positions at once", str(r.max_open_positions),
+                  "A ceiling on how many things can go wrong at the same time."),
+            _rule("Total invested", f"up to {r.max_gross_exposure * 100:g}% of equity",
+                  "Never borrows. At 100% the account can be fully invested but "
+                  "not leveraged."),
+            _rule("Stops trading if down", f"{r.max_drawdown_halt * 100:g}%",
+                  f"Opens nothing new until the account recovers to within "
+                  f"{r.resume_below * 100:g}% of its high, and waits "
+                  f"{r.halt_cooldown_days} days before reconsidering."),
+            _rule("Refuses lookalikes", f"{r.max_correlation:g} correlation",
+                  f"Two things that move together are one bet in two names. "
+                  f"Measured on {r.correlation_window} days of returns."),
+        ])
+
+        plays = "".join(
+            f'<tr><td><strong>{_esc(name)}</strong></td>'
+            f'<td class="why">{_esc(getattr(spec, "summary", "") or "")}</td></tr>'
+            for name, spec in PLAYBOOK.items()
+            if name in (sc.enabled or []))
+
+        mech = "".join([
+            _rule("Trend filter", f"{sc.sma_fast}-day over {sc.sma_slow}-day average",
+                  "Only buys things already trending up on the slower measure."),
+            _rule("Stop distance", f"{sc.min_stop_atr:g}-{sc.max_stop_atr:g} ATR",
+                  f"Placed off recent volatility ({sc.atr_period}-day ATR) rather "
+                  f"than a fixed percentage, so a calm stock gets a tight stop "
+                  f"and a wild one gets room."),
+            _rule("Reward sought", f"{sc.reward_risk:g}x the risk",
+                  "The take-profit sits this many multiples of the stop distance above entry."),
+            _rule("Maximum hold", f"{sc.max_hold_days} sessions",
+                  "A trade that has gone nowhere for this long is closed and the "
+                  "slot given back."),
+            _rule("Minimum liquidity",
+                  f"${sc.min_avg_dollar_volume:,.0f} traded a day",
+                  "Below this the spread and the slippage eat the edge."),
+        ])
+
+        costs = _rule("Assumed costs",
+                      f"{cfg.costs.slippage_bps:g} bps entry, "
+                      f"{cfg.costs.stop_slippage_bps:g} bps on stops",
+                      "Charged in every backtest, so the tested result is after "
+                      "costs rather than before them.")
+
+        rules_block = (
+            '<p class="note">Everything below is read from the agent\'s live '
+            'settings when this page is built, so it always describes what the '
+            'agent is actually doing right now.</p>'
+            '<h3>Money and risk</h3>'
+            '<div class="card scroll"><table><thead><tr><th>Rule</th>'
+            '<th class="n">Setting</th><th>Why</th></tr></thead>'
+            f'<tbody>{money}</tbody></table></div>'
+            '<h3>What it looks for</h3>'
+            '<div class="card scroll"><table><thead><tr><th>Strategy</th>'
+            f'<th>What it buys</th></tr></thead><tbody>{plays}</tbody></table></div>'
+            '<h3>How it decides</h3>'
+            '<div class="card scroll"><table><thead><tr><th>Rule</th>'
+            '<th class="n">Setting</th><th>Why</th></tr></thead>'
+            f'<tbody>{mech}{costs}</tbody></table></div>')
+    except Exception as exc:     # a broken settings page must not break the page
+        rules_block = (f'<div class="card empty">Could not read the settings '
+                       f'({_esc(type(exc).__name__)}).</div>')
+
     stamp = (f"Generated {state['updated_at']} UTC from the agent's own run records"
              if state.get("updated_at") else "This page has not been generated from a real run yet")
     if carried_from:
@@ -411,6 +605,21 @@ def build_html(state: dict = None, history: list = None,
   .ev.block .tag{{color:var(--critical);border-color:var(--critical)}}
   .ev.sold .tag{{color:var(--warning);border-color:var(--warning)}}
   .ev.fixed .tag{{color:var(--good);border-color:var(--good)}}
+  .tabs{{display:flex;gap:4px;flex-wrap:wrap;margin:4px 0 18px;
+    border-bottom:1px solid var(--gridline)}}
+  .tab{{appearance:none;background:none;border:none;border-bottom:2px solid transparent;
+    color:var(--text-secondary);font:inherit;font-size:13.5px;padding:8px 12px;
+    cursor:pointer;border-radius:6px 6px 0 0}}
+  .tab:hover{{color:var(--text-primary);background:var(--plane)}}
+  .tab[aria-selected="true"]{{color:var(--series-1);border-bottom-color:var(--series-1);
+    font-weight:600}}
+  .tab:focus-visible{{outline:2px solid var(--series-1);outline-offset:-2px}}
+  .panel h2:first-child{{margin-top:0}}
+  h3{{font-size:14px;margin:20px 0 8px;color:var(--text-primary)}}
+  .note{{color:var(--muted);font-size:12.5px;line-height:1.6;margin:10px 0 0;
+    max-width:70ch}}
+  .why{{color:var(--text-secondary);font-size:12.5px;line-height:1.5}}
+  .warn-inline{{color:var(--warning);font-size:11.5px}}
   .brief p{{margin:0 0 10px}} .brief p:last-child{{margin:0}}
   footer{{margin-top:30px;color:var(--muted);font-size:11.5px;line-height:1.6}}
 </style>
@@ -424,24 +633,50 @@ def build_html(state: dict = None, history: list = None,
 
   <nav class="sitenav"><a href="./floor.html">How a run works &rarr;</a></nav>
 
+  <!-- Banners sit OUTSIDE the tabs on purpose. An unprotected position or a
+       dead agent is not something to go looking for under a heading. -->
   <div id="banners">{banner}</div>
 
-  <div class="tiles">{tiles}</div>
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" data-panel="overview" aria-selected="true">Overview</button>
+    <button class="tab" role="tab" data-panel="positions" aria-selected="false">Positions</button>
+    <button class="tab" role="tab" data-panel="performance" aria-selected="false">Performance</button>
+    <button class="tab" role="tab" data-panel="rules" aria-selected="false">How it works</button>
+  </div>
 
-  <h2>Account equity</h2>
-  {chart_block}
+  <section class="panel" data-panel="overview">
+    <div class="tiles">{tiles}</div>
 
-  <h2>Open positions</h2>
-  {pos_block}
+    <h2>Account equity</h2>
+    {chart_block}
 
-  <h2>What the agent did on its last run</h2>
-  {today_block}
+    <h2>Open positions</h2>
+    {pos_block}
 
-  <h2>Briefing</h2>
-  {brief_block}
+    <h2>What the agent did on its last run</h2>
+    {today_block}
 
-  <h2>Recently closed</h2>
-  {trades_block}
+    <h2>Briefing</h2>
+    {brief_block}
+  </section>
+
+  <section class="panel" data-panel="positions" hidden>
+    <h2>What you are holding</h2>
+    {detail_block}
+  </section>
+
+  <section class="panel" data-panel="performance" hidden>
+    <h2>Closed trades</h2>
+    {perf_block}
+
+    <h2>Recently closed</h2>
+    {trades_block}
+  </section>
+
+  <section class="panel" data-panel="rules" hidden>
+    <h2>How this agent decides</h2>
+    {rules_block}
+  </section>
 
   <footer>
     {_esc(stamp)}.
@@ -526,6 +761,56 @@ def build_html(state: dict = None, history: list = None,
   document.addEventListener("visibilitychange", function () {{
     if (!document.hidden) {{ paint(); checkForNewer(); }}
   }});
+}})();
+
+/* ---------------------------------------------------------------------------
+   Tabs. The panel lives in the URL hash so a view can be linked to and
+   survives the reload the freshness check performs -- landing someone back on
+   Overview every time the agent runs would make the other tabs unusable.
+   With no JS every panel is simply visible, which is worse-looking but still
+   complete; nothing here is the only way to reach anything.
+--------------------------------------------------------------------------- */
+(function () {{
+  var tabs = [].slice.call(document.querySelectorAll('.tab'));
+  var panels = [].slice.call(document.querySelectorAll('.panel'));
+  if (!tabs.length) return;
+
+  function show(name, push) {{
+    var found = false;
+    panels.forEach(function (p) {{
+      var mine = p.getAttribute('data-panel') === name;
+      p.hidden = !mine;
+      if (mine) found = true;
+    }});
+    if (!found) return show('overview', push);
+    tabs.forEach(function (t) {{
+      t.setAttribute('aria-selected',
+        t.getAttribute('data-panel') === name ? 'true' : 'false');
+    }});
+    if (push && window.history && history.replaceState) {{
+      history.replaceState(null, '', '#' + name);
+    }}
+  }}
+
+  tabs.forEach(function (t) {{
+    t.addEventListener('click', function () {{
+      show(t.getAttribute('data-panel'), true);
+    }});
+    t.addEventListener('keydown', function (e) {{
+      var i = tabs.indexOf(t);
+      if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {{
+        e.preventDefault();
+        var n = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
+        n.focus();
+        show(n.getAttribute('data-panel'), true);
+      }}
+    }});
+  }});
+
+  window.addEventListener('hashchange', function () {{
+    show((location.hash || '#overview').slice(1), false);
+  }});
+  show((location.hash || '#overview').slice(1), false);
 }})();
 
 (function(){{

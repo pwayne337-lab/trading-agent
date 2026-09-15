@@ -214,6 +214,63 @@ WORKING_STATUSES = ("new", "accepted", "held", "partially_filled", "pending_new"
                     "accepted_for_bidding", "calculated", "")
 
 
+def protection_for(positions, open_orders) -> Dict[str, dict]:
+    """The working stop and target behind each held position, by symbol.
+
+    The broker knows these; the state file did not, so the page could show
+    what a position was worth but not how much of that was still at risk --
+    the single most useful thing to know about a position you already own.
+    Recorded at run time so the page never has to ask the broker itself.
+
+    Reads the same flattened, deduped order list and the same working-status
+    allowlist as the coverage check, so what the page draws and what the
+    watchers judge can never disagree about the same order.
+    """
+    owned = {}
+    for p in (positions or []):
+        sym = p.get("symbol")
+        if not sym:
+            continue
+        try:
+            owned[sym] = int(float(p.get("shares") or 0))
+        except (TypeError, ValueError):
+            owned[sym] = 0
+
+    out: Dict[str, dict] = {}
+    for o in _flatten_orders(open_orders):
+        sym = o.get("symbol")
+        if sym not in owned:
+            continue
+        if not str(o.get("side", "")).startswith("sell"):
+            continue
+        if str(o.get("status") or "").lower() not in WORKING_STATUSES:
+            continue
+        rec = out.setdefault(sym, {"stop": None, "target": None, "stop_shares": 0})
+        try:
+            qty = abs(int(float(o.get("qty") or 0)))
+        except (TypeError, ValueError):
+            qty = 0
+        raw_stop = o.get("stop_price")
+        raw_limit = o.get("limit_price")
+        if raw_stop not in (None, ""):
+            try:
+                price = float(raw_stop)
+            except (TypeError, ValueError):
+                continue
+            # Several stops can cover one position (a partial bracket leg plus
+            # a repair). The nearest one is what actually gets hit first, so it
+            # is the honest number to show as the floor under the trade.
+            if rec["stop"] is None or price > rec["stop"]:
+                rec["stop"] = price
+            rec["stop_shares"] += qty
+        elif raw_limit not in (None, ""):
+            try:
+                rec["target"] = float(raw_limit)
+            except (TypeError, ValueError):
+                pass
+    return out
+
+
 def orphaned_targets(positions, open_orders) -> Dict[str, List[dict]]:
     """Exposed symbols whose shares are reserved by a sell order that is not a
     stop, keyed to those orders.
