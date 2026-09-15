@@ -1,11 +1,11 @@
 {
-  "updated_at": "2026-09-14T23:56:17+00:00",
+  "updated_at": "2026-09-15T19:36:44+00:00",
   "mode": "paper",
   "healthy": true,
   "account": {
-    "equity": 99006.78,
-    "cash": 320.54,
-    "buying_power": 277603.62,
+    "equity": 98046.89,
+    "cash": -72.99,
+    "buying_power": 274443.69,
     "status": "ACTIVE",
     "pattern_day_trader": null,
     "trading_blocked": false,
@@ -16,57 +16,100 @@
       "symbol": "AAPL",
       "shares": 56,
       "avg_entry": 327.423929,
-      "market_value": 18613.476,
-      "unrealized_pl": 277.735976
+      "market_value": 18479.44,
+      "unrealized_pl": 143.699976,
+      "stop": 309.11,
+      "target": 361.49,
+      "stop_shares": 56,
+      "stop_checked": true
     },
     {
       "symbol": "ABNB",
       "shares": 71,
       "avg_entry": 167.804789,
-      "market_value": 12055.8,
-      "unrealized_pl": 141.659981
+      "market_value": 11921.61,
+      "unrealized_pl": 7.469981,
+      "stop": 158.13,
+      "target": 197.25,
+      "stop_shares": 71,
+      "stop_checked": true
     },
     {
       "symbol": "ABT",
       "shares": 142,
       "avg_entry": 104.877324,
-      "market_value": 14638.78,
-      "unrealized_pl": -253.800008
+      "market_value": 14476.19,
+      "unrealized_pl": -416.390008,
+      "stop": 98.79,
+      "target": 119.14,
+      "stop_shares": 142,
+      "stop_checked": true
     },
     {
-      "symbol": "ADP",
-      "shares": 35,
-      "avg_entry": 267.998286,
-      "market_value": 9682.75,
-      "unrealized_pl": 302.80999
+      "symbol": "AMAT",
+      "shares": 17,
+      "avg_entry": 426.28,
+      "market_value": 7140.935,
+      "unrealized_pl": -105.825,
+      "stop": 367.96,
+      "target": 536.7,
+      "stop_shares": 17,
+      "stop_checked": true
     },
     {
       "symbol": "AMGN",
       "shares": 33,
       "avg_entry": 383.8,
-      "market_value": 12556.5,
-      "unrealized_pl": -108.9
+      "market_value": 12391.005,
+      "unrealized_pl": -274.395,
+      "stop": 353.44,
+      "target": 440.53,
+      "stop_shares": 33,
+      "stop_checked": true
     },
     {
       "symbol": "AMZN",
       "shares": 1,
       "avg_entry": 250.27,
-      "market_value": 253.5,
-      "unrealized_pl": 3.23
+      "market_value": 248.1,
+      "unrealized_pl": -2.17,
+      "stop": 239.74,
+      "target": 284.75,
+      "stop_shares": 1,
+      "stop_checked": true
     },
     {
       "symbol": "APD",
       "shares": 39,
       "avg_entry": 295.0,
-      "market_value": 11198.07,
-      "unrealized_pl": -306.93
+      "market_value": 11218.155,
+      "unrealized_pl": -286.845,
+      "stop": 278.46,
+      "target": 324.02,
+      "stop_shares": 39,
+      "stop_checked": true
     },
     {
       "symbol": "CL",
       "shares": 224,
       "avg_entry": 88.24,
-      "market_value": 19687.36,
-      "unrealized_pl": -78.4
+      "market_value": 19486.88,
+      "unrealized_pl": -278.88,
+      "stop": 84.64,
+      "target": 97.66,
+      "stop_shares": 224,
+      "stop_checked": true
+    },
+    {
+      "symbol": "DDOG",
+      "shares": 12,
+      "avg_entry": 227.86,
+      "market_value": 2757.0,
+      "unrealized_pl": 22.68,
+      "stop": 201.99,
+      "target": 286.18,
+      "stop_shares": 12,
+      "stop_checked": true
     }
   ],
   "signals": [
@@ -200,8 +243,13 @@
   "findings": [
     {
       "severity": "info",
-      "agent": "watchdog",
-      "message": "the previous run (2026-09-14) ended with 1 error(s), since resolved: could not read working orders: GET /v2/orders failed to reach the broker:..."
+      "agent": "reconcile",
+      "message": "new since last run: AMAT, DDOG"
+    },
+    {
+      "severity": "info",
+      "agent": "reconcile",
+      "message": "closed since last run: ADP"
     }
   ],
   "briefing": "Research is off. Add ANTHROPIC_API_KEY to your .env file to get a written briefing here.",
@@ -280,5 +328,6 @@
     "llm_calls": 0,
     "llm_errors": 0,
     "enabled": false
-  }
+  },
+  "monitor_only": true
 }
