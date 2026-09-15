@@ -175,15 +175,35 @@ def check_data(bars: Dict[str, pd.DataFrame], expected: List[str],
 
 def _flatten_orders(open_orders) -> List[dict]:
     """Bracket legs arrive nested under the parent until it fills. Flatten so
-    a leg is never missed just because of where the broker put it."""
+    a leg is never missed just because of where the broker put it.
+
+    Deduped by order id. open_orders() reads the broker twice -- once for
+    working orders by status, once as a paged sweep of recent ones -- so the
+    same leg can arrive standalone from one and nested under a parent from the
+    other. The parent carries a different id, so the top-level dedupe there
+    cannot catch the leg inside it. Every caller that counts anything has to
+    dedupe or be wrong, and _stop_coverage was the only one doing it. Doing it
+    here means the next caller does not have to remember.
+    """
     flat: List[dict] = []
+    seen: set = set()
+
+    def add(o):
+        if not isinstance(o, dict):
+            return
+        oid = o.get("id")
+        if oid is not None:
+            if oid in seen:
+                return
+            seen.add(oid)
+        flat.append(o)
+
     for o in (open_orders or []):
         if not isinstance(o, dict):
             continue
-        flat.append(o)
+        add(o)
         for leg in (o.get("legs") or []):
-            if isinstance(leg, dict):
-                flat.append(leg)
+            add(leg)
     return flat
 
 

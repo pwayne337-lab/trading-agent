@@ -1000,7 +1000,12 @@ def _cmd_run(args):
             # sell and a market buy for one symbol into the same open.
             closed_today.add(sym)
             strat_map.pop(sym, None)
-            gross -= p.get("market_value", 0)
+            # Floored the same way it was added. Line 806 contributes 0 for a
+            # short, so subtracting the raw signed value here ADDED five
+            # thousand dollars of imaginary room when a short was closed, and
+            # the next candidate was then refused with a "no room left"
+            # message that was wrong about the reason.
+            gross -= max(0.0, float(p.get("market_value") or 0.0))
             open_count = max(0, open_count - 1)
 
     returns = pd.DataFrame({s: d["close"].pct_change() for s, d in bars.items()})

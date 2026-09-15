@@ -199,9 +199,19 @@ class AlpacaBroker:
                 if oid:
                     seen.add(oid)
                 out.append(o)
-        except BrokerError:
-            # The paged sweep below is the fallback, not a silent success.
-            pass
+        except BrokerError as exc:
+            # Unknown is not empty, and this list decides whether a position
+            # looks protected. The paged sweep below cannot stand in for this
+            # read: it walks the 2000 most recently SUBMITTED orders, which is
+            # exactly the window an old GTC stop has fallen out of -- the whole
+            # reason this request exists. Swallowing a 429 here would hand back
+            # a partial order book as though it were complete, the position
+            # would read as naked, and the repair would stack a second stop
+            # behind a working one. Callers already treat a raise as "stop and
+            # say so", which is the safe direction: a missed run costs a day,
+            # a doubled stop can open a short.
+            raise BrokerError(
+                f"could not read the working order list: {exc}") from exc
 
         for _ in range(4):        # 2000 orders is far more than a day produces
             params = {"status": "all", "limit": 500, "direction": "desc",

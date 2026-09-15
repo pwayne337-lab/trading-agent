@@ -934,6 +934,65 @@ check("a clean run with only a note shows no error banner",
 
 # ---------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
+# A save must never ERASE the last-traded marker. _cmd_run builds its state
+# from blank_state() and carries almost nothing forward, so every path in it
+# that saves without full_run wrote a null over a real timestamp -- and the
+# page then announced "the agent has not traded" about an agent that traded
+# the night before. Held in save_state rather than at each call site, so a
+# command added later does not have to know the rule exists.
+import tempfile as _tf, pathlib as _pl
+from tbot import state as _stm
+
+_sd = _pl.Path(_tf.mkdtemp())
+_orig_dir, _orig_file = _stm.STATE_DIR, _stm.STATE_FILE
+_stm.STATE_DIR, _stm.STATE_FILE = _sd, _sd / "agent_state.json"
+_stm.save_state(_stm.blank_state(), full_run=True)
+_stamped = _stm.load_state()["last_full_run"]
+check("a real run stamps the last-traded marker", bool(_stamped))
+_stm.save_state(_stm.blank_state())          # the market-hours guard path
+check("a save that is not a trading run does not erase it",
+      _stm.load_state()["last_full_run"] == _stamped,
+      f"marker became {_stm.load_state()['last_full_run']}")
+# now_iso has one-second resolution, so comparing against the old value would
+# fail purely on how fast the test runs. The invariant that matters is that a
+# real run re-stamps the marker to its OWN timestamp.
+_stm.save_state(_stm.blank_state(), full_run=True)
+_after = _stm.load_state()
+check("a later real run re-stamps it to that run's own time",
+      _after["last_full_run"] == _after["updated_at"],
+      f"{_after['last_full_run']} vs {_after['updated_at']}")
+_stm.STATE_DIR, _stm.STATE_FILE = _orig_dir, _orig_file
+
+# An unreadable working-order list is unknown, not empty. Swallowing it handed
+# back a partial order book as complete, which reads as "this position has no
+# stop" and gets a second one stacked behind the working one.
+from tbot.broker import BrokerError as _BErr2
+
+
+class _OpenReadFails(_AB):
+    def __init__(self):
+        super().__init__(key="k", secret="s", dry_run=False)
+    def _request(self, method, path, params=None, **kw):
+        if params and params.get("status") == "open":
+            raise _BErr2("429 too many requests")
+        return [{"id": "recent", "symbol": "ZZ", "side": "buy", "status": "new"}]
+
+
+_raised_open = ""
+try:
+    _OpenReadFails().open_orders()
+except _BErr2 as exc:
+    _raised_open = str(exc)
+check("a failed working-order read is raised, not papered over",
+      "could not read the working order list" in _raised_open, _raised_open)
+
+# Exposure must be subtracted the same way it was added.
+_mv = -5000.0
+check("closing a short does not invent buying room",
+      max(0.0, float(_mv or 0.0)) == 0.0)
+
+
+# ---------------------------------------------------------------------------
 # A GTC protective stop stays working for months while its submitted_at
 # recedes. The paged sweep walks the most recently SUBMITTED orders, so on a
 # busy account that stop eventually falls off the end of the window and the

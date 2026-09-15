@@ -84,6 +84,22 @@ def save_state(state: dict, full_run: bool = False) -> Path:
     state["updated_at"] = now_iso()
     if full_run:
         state["last_full_run"] = state["updated_at"]
+    elif not state.get("last_full_run"):
+        # Never let a save ERASE the marker. _cmd_run builds its state from
+        # blank_state() and carries almost nothing forward, so any path in it
+        # that saves without full_run -- the market-hours guard, for one --
+        # wrote a null over a real timestamp and made the page announce "the
+        # agent has not traded" about an agent that traded yesterday.
+        #
+        # Held here rather than at each call site on purpose: this is the one
+        # place every writer passes through, and the next command added to
+        # this system should not have to know the rule exists.
+        try:
+            prior = json.loads(STATE_FILE.read_text()).get("last_full_run")
+        except Exception:
+            prior = None
+        if prior:
+            state["last_full_run"] = prior
     STATE_FILE.write_text(json.dumps(state, indent=2, default=str))
     return STATE_FILE
 
