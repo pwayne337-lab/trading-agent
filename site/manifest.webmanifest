@@ -1,0 +1,18 @@
+{
+  "name": "Trading Agent Monitor",
+  "short_name": "Agent",
+  "description": "A paper-trading dashboard for an automated swing-trading agent.",
+  "start_url": "./index.html#overview",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#070b12",
+  "theme_color": "#070b12",
+  "icons": [
+    {
+      "src": "./app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

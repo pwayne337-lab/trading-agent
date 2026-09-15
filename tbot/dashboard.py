@@ -42,7 +42,8 @@ def _age(updated_at) -> tuple:
     if hrs < 1:
         s = f"{int(hrs * 60)} min ago"
     elif hrs < 48:
-        s = f"{int(hrs)} hours ago"
+        n = int(hrs)
+        s = f"{n} {'hour' if n == 1 else 'hours'} ago"
     else:
         s = f"{int(hrs / 24)} days ago"
 
@@ -202,7 +203,7 @@ def build_html(state: dict = None, history: list = None,
     if len(history) >= 2:
         dates = [h["date"][5:] for h in history]
         vals = [h["equity"] for h in history]
-        chart, pts = _line_chart(dates, vals, "--series-1")
+        chart, pts = _line_chart(dates, vals, "--series-1", fill=True)
         chart_block = f'<div class="card" id="c1">{chart}<div class="tip" id="t1"></div></div>'
     else:
         chart, pts = "", "[]"
@@ -236,7 +237,7 @@ def build_html(state: dict = None, history: list = None,
             f"<td class='n {'pos' if float(p.get('unrealized_pl') or 0) >= 0 else 'neg'}'>"
             f"${float(p.get('unrealized_pl') or 0):+,.2f}</td></tr>"
             for p in positions)
-        pos_block = (f'<div class="card scroll"><table><thead><tr><th>Symbol</th>'
+        pos_block = (f'<div class="card scroll positions-summary"><table><thead><tr><th>Symbol</th>'
                      f'<th class="n">Shares</th><th class="n">Avg cost</th>'
                      f'<th class="n">Value</th><th class="n">Open P&amp;L</th>'
                      f'</tr></thead><tbody>{rows}</tbody></table></div>')
@@ -356,21 +357,28 @@ def build_html(state: dict = None, history: list = None,
                 dist_cell = risk_cell = r_cell = "&mdash;"
 
             tag = f' <span class="tag">{strat}</span>' if strat else ""
+            # `sec` marks the columns a phone drops. Nine columns do not fit on
+            # a 390px screen, and the ones that were scrolling off were Stop,
+            # At risk and P&L -- which is the entire question you open this on
+            # a phone to answer. Shares, entry and last price are reference,
+            # and they stay one turn of the device away rather than pushing
+            # the answer off the edge.
             rows.append(
                 f"<tr><td><strong>{sym}</strong>{tag}</td>"
-                f"<td class='n'>{int(shares)}</td>"
-                f"<td class='n'>${entry:,.2f}</td>"
-                f"<td class='n'>${last:,.2f}</td>"
+                f"<td class='n sec'>{int(shares)}</td>"
+                f"<td class='n sec'>${entry:,.2f}</td>"
+                f"<td class='n sec'>${last:,.2f}</td>"
                 f"<td class='n'>{stop_cell}</td>"
                 f"<td class='n'>{dist_cell}</td>"
-                f"<td class='n'>{risk_cell}</td>"
-                f"<td class='n'>{r_cell}</td>"
+                f"<td class='n sec'>{risk_cell}</td>"
+                f"<td class='n sec'>{r_cell}</td>"
                 f"<td class='n {'pos' if pl >= 0 else 'neg'}'>${pl:+,.2f}</td></tr>")
         detail_block = (
-            '<div class="card scroll"><table><thead><tr><th>Symbol</th>'
-            '<th class="n">Shares</th><th class="n">Entry</th><th class="n">Last</th>'
+            '<div class="card scroll positions-detail"><table><thead><tr><th>Symbol</th>'
+            '<th class="n sec">Shares</th><th class="n sec">Entry</th>'
+            '<th class="n sec">Last</th>'
             '<th class="n">Stop</th><th class="n">To stop</th>'
-            '<th class="n">At risk</th><th class="n">R</th>'
+            '<th class="n sec">At risk</th><th class="n sec">R</th>'
             '<th class="n">Open P&amp;L</th></tr></thead><tbody>'
             + "".join(rows) + '</tbody></table></div>'
             + '<p class="note">"At risk" is what this position loses from here if '
@@ -641,131 +649,230 @@ def build_html(state: dict = None, history: list = None,
      bottom checks for a newer run and reloads past that cache. -->
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Agent">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#070b12">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./app-icon.svg" type="image/svg+xml">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <title>{_esc(title)}</title>
 <style>
   :root {{
-    color-scheme: light;
-    --surface-1:#fcfcfb; --plane:#f9f9f7;
-    --text-primary:#0b0b0b; --text-secondary:#52514e; --muted:#898781;
-    --gridline:#e1e0d9; --border:rgba(11,11,11,0.10);
-    --series-1:#2a78d6; --good:#006300; --critical:#d03b3b; --warning:#a86a00;
+    color-scheme:light;
+    --plane:#f3f5f8; --surface-1:#ffffff; --surface-2:#f7f9fc;
+    --surface-raised:#ffffff; --text-primary:#0b1220; --text-secondary:#48556a;
+    --muted:#7b8799; --gridline:#e8edf3; --border:rgba(15,23,42,.09);
+    --series-1:#2563eb; --series-soft:rgba(37,99,235,.10);
+    --good:#078352; --good-soft:rgba(7,131,82,.10);
+    --critical:#d23f4c; --critical-soft:rgba(210,63,76,.10);
+    --warning:#aa6800; --warning-soft:rgba(170,104,0,.10);
+    --shadow:0 1px 2px rgba(15,23,42,.04),0 12px 32px rgba(15,23,42,.06);
+    --nav-height:68px;
   }}
   @media (prefers-color-scheme: dark) {{
     :root:not([data-theme="light"]) {{
       color-scheme: dark;
-      --surface-1:#1a1a19; --plane:#0d0d0d;
-      --text-primary:#fff; --text-secondary:#c3c2b7; --muted:#898781;
-      --gridline:#2c2c2a; --border:rgba(255,255,255,0.10);
-      --series-1:#3987e5; --good:#0ca30c; --critical:#e06060; --warning:#fab219;
+      --plane:#070b12; --surface-1:#0d131d; --surface-2:#111a27;
+      --surface-raised:#151e2c; --text-primary:#f6f8fb; --text-secondary:#aab5c5;
+      --muted:#738096; --gridline:#1b2635; --border:rgba(255,255,255,.085);
+      --series-1:#62a1ff; --series-soft:rgba(98,161,255,.11);
+      --good:#35d49a; --good-soft:rgba(53,212,154,.10);
+      --critical:#ff6b75; --critical-soft:rgba(255,107,117,.10);
+      --warning:#f3b54a; --warning-soft:rgba(243,181,74,.10);
+      --shadow:0 1px 2px rgba(0,0,0,.25),0 18px 45px rgba(0,0,0,.22);
     }}
   }}
   *{{box-sizing:border-box}}
-  body{{margin:0;background:var(--plane);color:var(--text-primary);
-    font:15px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif;
-    -webkit-text-size-adjust:100%}}
-  .wrap{{max-width:900px;margin:0 auto;padding:20px 16px 56px}}
-  header{{display:flex;flex-wrap:wrap;gap:8px;align-items:baseline;
-    justify-content:space-between;margin-bottom:16px}}
-  h1{{font-size:20px;margin:0;letter-spacing:-0.01em}}
-  .mode{{font-size:11px;letter-spacing:.08em;text-transform:uppercase;
-    border:1px solid var(--border);border-radius:999px;padding:3px 10px;
-    color:var(--text-secondary)}}
+  html{{scroll-behavior:smooth}}
+  body{{margin:0;min-height:100vh;background:var(--plane);color:var(--text-primary);
+    font:15px/1.55 Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-text-size-adjust:100%;font-variant-numeric:tabular-nums}}
+  body::before{{content:"";position:fixed;inset:0 0 auto;height:360px;pointer-events:none;
+    background:radial-gradient(700px 300px at 50% -100px,var(--series-soft),transparent 72%);
+    z-index:-1}}
+  button,a{{-webkit-tap-highlight-color:transparent}}
+  .wrap{{max-width:1120px;margin:0 auto;padding:30px 28px 72px}}
+  header{{display:flex;gap:16px;align-items:center;justify-content:space-between;
+    margin-bottom:24px}}
+  .brand{{display:flex;align-items:center;gap:12px;min-width:0}}
+  .brandmark{{width:38px;height:38px;display:grid;place-items:center;flex:0 0 auto;
+    border-radius:12px;color:white;background:linear-gradient(145deg,#397cff,#2352ce);
+    box-shadow:0 10px 24px rgba(37,99,235,.28)}}
+  .brandmark svg{{width:22px;height:22px}}
+  h1{{font-size:18px;line-height:1.2;margin:0;letter-spacing:-.025em}}
+  .subtitle{{font-size:11.5px;color:var(--muted);margin:2px 0 0}}
+  .header-actions{{display:flex;align-items:center;gap:9px}}
+  .iconbtn{{appearance:none;width:36px;height:36px;display:grid;place-items:center;
+    border:1px solid var(--border);border-radius:11px;background:var(--surface-1);
+    color:var(--text-secondary);cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.04)}}
+  .iconbtn:hover{{color:var(--series-1);border-color:var(--series-1)}}
+  .iconbtn svg{{width:17px;height:17px}}
+  .iconbtn.spinning svg{{animation:spin .65s ease}}
+  @keyframes spin{{to{{transform:rotate(360deg)}}}}
+  .mode{{display:inline-flex;align-items:center;gap:7px;font-size:10.5px;font-weight:700;
+    letter-spacing:.11em;text-transform:uppercase;border:1px solid var(--border);
+    border-radius:999px;padding:7px 11px;color:var(--text-secondary);background:var(--surface-1)}}
+  .mode::before{{content:"";width:6px;height:6px;border-radius:50%;background:var(--good);
+    box-shadow:0 0 0 3px var(--good-soft)}}
   .mode.live{{color:var(--critical);border-color:var(--critical)}}
-  h2{{font-size:14px;margin:26px 0 9px;color:var(--text-secondary);font-weight:600}}
-  .sitenav{{margin:-6px 0 14px}}
-  .sitenav a{{font-size:12.5px;color:var(--muted);text-decoration:none;
-    border-bottom:1px solid var(--border);padding-bottom:2px}}
-  .sitenav a:hover,.sitenav a:focus-visible{{color:var(--series-1);
-    border-color:var(--series-1)}}
-  .banner{{border-radius:9px;padding:11px 14px;margin-bottom:14px;font-size:13.5px;
-    border:1px solid var(--border);background:var(--surface-1)}}
-  .banner.critical{{border-left:3px solid var(--critical)}}
-  .banner.warning{{border-left:3px solid var(--warning)}}
-  .banner.info{{border-left:3px solid var(--series-1)}}
-  .tiles{{display:grid;gap:9px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}}
-  .tile{{background:var(--surface-1);border:1px solid var(--border);
-    border-radius:10px;padding:12px 14px}}
-  .tl{{color:var(--text-secondary);font-size:11.5px}}
-  .tv{{font-size:22px;font-weight:600;margin:3px 0 2px;letter-spacing:-0.02em}}
-  .ts{{color:var(--muted);font-size:11px}}
+  .mode.live::before{{background:var(--critical);box-shadow:0 0 0 3px var(--critical-soft)}}
+  h2{{font-size:17px;margin:34px 0 12px;color:var(--text-primary);font-weight:680;
+    letter-spacing:-.02em}}
+  .sitenav{{margin:-10px 0 20px;padding-left:50px}}
+  .sitenav a{{display:inline-flex;align-items:center;gap:5px;font-size:12px;
+    font-weight:600;color:var(--muted);text-decoration:none}}
+  .sitenav a:hover,.sitenav a:focus-visible{{color:var(--series-1)}}
+  .banner{{border-radius:14px;padding:13px 16px;margin-bottom:12px;font-size:13px;
+    line-height:1.55;border:1px solid var(--border);background:var(--surface-1);box-shadow:var(--shadow)}}
+  .banner.critical{{border-color:rgba(210,63,76,.28);background:var(--critical-soft)}}
+  .banner.warning{{border-color:rgba(170,104,0,.26);background:var(--warning-soft)}}
+  .banner.info{{border-color:rgba(37,99,235,.22);background:var(--series-soft)}}
+  .tiles{{display:grid;gap:12px;grid-template-columns:repeat(3,minmax(0,1fr))}}
+  .tile{{min-width:0;background:linear-gradient(145deg,var(--surface-1),var(--surface-2));
+    border:1px solid var(--border);border-radius:17px;padding:18px 19px;box-shadow:var(--shadow)}}
+  .tl{{color:var(--text-secondary);font-size:11.5px;font-weight:600}}
+  .tv{{font-size:clamp(22px,3vw,28px);line-height:1.16;font-weight:700;margin:7px 0 6px;
+    letter-spacing:-.035em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
+  .ts{{color:var(--muted);font-size:11px;line-height:1.45}}
   .tile.good .tv{{color:var(--good)}} .tile.bad .tv,.tile.critical .tv{{color:var(--critical)}}
   .tile.warning .tv{{color:var(--warning)}}
   .card{{background:var(--surface-1);border:1px solid var(--border);
-    border-radius:10px;padding:14px;position:relative}}
+    border-radius:18px;padding:18px;position:relative;box-shadow:var(--shadow)}}
   .card.empty{{color:var(--muted);font-size:13.5px}}
-  .chart{{width:100%;height:230px;display:block}}
-  .tick{{fill:var(--muted);font-size:11px;font-variant-numeric:tabular-nums}}
+  .chart{{width:100%;height:270px;display:block;overflow:visible}}
+  .tick{{fill:var(--muted);font-size:10px;font-variant-numeric:tabular-nums}}
   .tip{{position:absolute;pointer-events:none;opacity:0;background:var(--surface-1);
-    border:1px solid var(--border);border-radius:8px;padding:6px 9px;font-size:12px;
-    box-shadow:0 4px 14px rgba(0,0,0,.14);transition:opacity .1s;white-space:nowrap}}
-  table{{width:100%;border-collapse:collapse;font-size:13.5px}}
-  th{{text-align:left;color:var(--text-secondary);font-weight:500;
-    border-bottom:1px solid var(--border);padding:7px 8px;white-space:nowrap}}
-  td{{padding:8px;border-bottom:1px solid var(--gridline)}}
+    border:1px solid var(--border);border-radius:10px;padding:7px 10px;font-size:11.5px;
+    box-shadow:0 10px 28px rgba(0,0,0,.18);transition:opacity .1s;white-space:nowrap}}
+  table{{width:100%;border-collapse:collapse;font-size:13px}}
+  th{{text-align:left;color:var(--muted);font-weight:650;text-transform:uppercase;
+    letter-spacing:.055em;font-size:9.5px;border-bottom:1px solid var(--border);
+    padding:5px 10px 11px;white-space:nowrap}}
+  td{{padding:13px 10px;border-bottom:1px solid var(--gridline)}}
   tr:last-child td{{border-bottom:none}}
+  tbody tr{{transition:background .15s ease}}
+  tbody tr:hover{{background:var(--surface-2)}}
   .n{{text-align:right;font-variant-numeric:tabular-nums}}
   .pos{{color:var(--good)}} .neg{{color:var(--critical)}}
-  .scroll{{overflow-x:auto}}
+  .scroll{{overflow-x:auto;-webkit-overflow-scrolling:touch}}
   .events{{list-style:none;margin:0;padding:0}}
-  .ev{{padding:9px 0;border-bottom:1px solid var(--gridline);font-size:13.5px}}
+  .ev{{padding:12px 2px;border-bottom:1px solid var(--gridline);font-size:13px}}
   .ev:last-child{{border-bottom:none}}
   .ev.quiet{{color:var(--muted)}}
-  .tag{{display:inline-block;font-size:10.5px;text-transform:uppercase;
-    letter-spacing:.06em;padding:2px 7px;border-radius:999px;margin-right:7px;
-    border:1px solid var(--border);color:var(--text-secondary)}}
-  .ev.ok .tag{{color:var(--good);border-color:var(--good)}}
-  .ev.block .tag{{color:var(--critical);border-color:var(--critical)}}
-  .ev.sold .tag{{color:var(--warning);border-color:var(--warning)}}
-  .ev.fixed .tag{{color:var(--good);border-color:var(--good)}}
-  .verdict{{display:flex;gap:10px;align-items:flex-start;margin:0 0 14px;
-    padding:12px 14px;border-radius:9px;font-size:14px;line-height:1.5;
-    border:1px solid var(--border);background:var(--surface-1)}}
-  .verdict .dot{{width:9px;height:9px;border-radius:50%;margin-top:6px;
-    flex:0 0 9px}}
+  .tag{{display:inline-flex;align-items:center;font-size:9.5px;font-weight:700;text-transform:uppercase;
+    letter-spacing:.07em;padding:3px 7px;border-radius:999px;margin-right:7px;
+    border:1px solid var(--border);color:var(--text-secondary);background:var(--surface-2)}}
+  .ev.ok .tag{{color:var(--good);border-color:transparent;background:var(--good-soft)}}
+  .ev.block .tag{{color:var(--critical);border-color:transparent;background:var(--critical-soft)}}
+  .ev.sold .tag{{color:var(--warning);border-color:transparent;background:var(--warning-soft)}}
+  .ev.fixed .tag{{color:var(--good);border-color:transparent;background:var(--good-soft)}}
+  .verdict{{display:flex;gap:14px;align-items:flex-start;margin:0 0 12px;
+    padding:18px;border-radius:18px;font-size:14px;line-height:1.5;
+    border:1px solid var(--border);background:var(--surface-1);box-shadow:var(--shadow)}}
+  .verdict .dot{{position:relative;width:11px;height:11px;border-radius:50%;margin-top:5px;flex:0 0 11px}}
+  .verdict .dot::after{{content:"";position:absolute;inset:-5px;border-radius:50%;opacity:.18;background:inherit}}
   .verdict.ok .dot{{background:var(--good)}}
   .verdict.warning .dot{{background:var(--warning)}}
   .verdict.critical .dot{{background:var(--critical)}}
-  .verdict.ok{{border-left:3px solid var(--good)}}
-  .verdict.warning{{border-left:3px solid var(--warning)}}
-  .verdict.critical{{border-left:3px solid var(--critical)}}
-  .vsub{{display:block;color:var(--muted);font-size:12.5px;margin-top:2px}}
-  .copybtn{{appearance:none;border:1px solid var(--border);background:var(--plane);
-    color:var(--text-primary);font:inherit;font-size:13px;padding:8px 14px;
-    border-radius:7px;cursor:pointer}}
-  .copybtn:hover{{border-color:var(--series-1);color:var(--series-1)}}
+  .verdict.ok{{border-color:rgba(7,131,82,.25)}}
+  .verdict.warning{{border-color:rgba(170,104,0,.28)}}
+  .verdict.critical{{border-color:rgba(210,63,76,.3)}}
+  .verdict strong{{font-size:15px;margin-right:3px}}
+  .vsub{{display:block;color:var(--muted);font-size:11.5px;margin-top:3px}}
+  .copybtn{{appearance:none;border:0;background:var(--series-1);color:white;font:inherit;
+    font-size:12.5px;font-weight:650;padding:9px 14px;border-radius:10px;cursor:pointer;
+    box-shadow:0 8px 20px var(--series-soft)}}
+  .copybtn:hover{{filter:brightness(1.08)}}
   .copied{{margin-left:9px;color:var(--good);font-size:12.5px}}
   pre{{white-space:pre-wrap;word-break:break-word;font-size:11.5px;
-    line-height:1.5;background:var(--plane);border:1px solid var(--gridline);
-    border-radius:7px;padding:10px;margin:8px 0 0;overflow-x:auto}}
-  .tabs{{display:flex;gap:4px;flex-wrap:wrap;margin:4px 0 18px;
-    border-bottom:1px solid var(--gridline)}}
-  .tab{{appearance:none;background:none;border:none;border-bottom:2px solid transparent;
-    color:var(--text-secondary);font:inherit;font-size:13.5px;padding:8px 12px;
-    cursor:pointer;border-radius:6px 6px 0 0}}
-  .tab:hover{{color:var(--text-primary);background:var(--plane)}}
-  .tab[aria-selected="true"]{{color:var(--series-1);border-bottom-color:var(--series-1);
-    font-weight:600}}
-  .tab:focus-visible{{outline:2px solid var(--series-1);outline-offset:-2px}}
+    line-height:1.55;background:var(--surface-2);border:1px solid var(--gridline);
+    border-radius:11px;padding:12px;margin:10px 0 0;overflow-x:auto}}
+  .tabs{{position:sticky;top:10px;z-index:20;display:flex;gap:4px;margin:18px 0 24px;
+    padding:5px;border:1px solid var(--border);border-radius:14px;background:rgba(13,19,29,.82);
+    box-shadow:var(--shadow);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}}
+  @media (prefers-color-scheme:light){{.tabs{{background:rgba(255,255,255,.86)}}}}
+  .tab{{appearance:none;flex:1;display:flex;align-items:center;justify-content:center;gap:7px;
+    background:none;border:none;color:var(--muted);font:inherit;font-size:12px;
+    font-weight:620;padding:9px 12px;cursor:pointer;border-radius:10px}}
+  .tab svg{{width:15px;height:15px;stroke-width:1.8}}
+  .tab:hover{{color:var(--text-primary);background:var(--surface-2)}}
+  .tab[aria-selected="true"]{{color:var(--series-1);background:var(--series-soft)}}
+  .tab:focus-visible{{outline:2px solid var(--series-1);outline-offset:1px}}
   .panel h2:first-child{{margin-top:0}}
-  h3{{font-size:14px;margin:20px 0 8px;color:var(--text-primary)}}
+  h3{{font-size:14px;margin:24px 0 9px;color:var(--text-primary)}}
   .note{{color:var(--muted);font-size:12.5px;line-height:1.6;margin:10px 0 0;
     max-width:70ch}}
   .why{{color:var(--text-secondary);font-size:12.5px;line-height:1.5}}
   .warn-inline{{color:var(--warning);font-size:11.5px}}
   .muted-inline{{color:var(--muted);font-size:11.5px}}
   .brief p{{margin:0 0 10px}} .brief p:last-child{{margin:0}}
-  footer{{margin-top:30px;color:var(--muted);font-size:11.5px;line-height:1.6}}
+  footer{{margin-top:42px;padding-top:20px;border-top:1px solid var(--gridline);
+    color:var(--muted);font-size:11px;line-height:1.7}}
+  @media (max-width:700px) {{
+    body::before{{height:260px;background:radial-gradient(520px 230px at 45% -70px,var(--series-soft),transparent 75%)}}
+    .wrap{{padding:22px 16px calc(var(--nav-height) + 38px)}}
+    header{{margin-bottom:21px}}
+    .brandmark{{width:36px;height:36px;border-radius:11px}}
+    .subtitle{{display:none}}
+    .sitenav{{padding-left:48px;margin-top:-15px}}
+    .tiles{{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}}
+    .tile{{padding:15px 14px;border-radius:15px}}
+    .tv{{font-size:clamp(20px,6.1vw,27px)}}
+    .ts{{font-size:10.5px}}
+    .chart{{height:220px}}
+    .card{{padding:14px;border-radius:16px}}
+    h2{{font-size:16px;margin-top:30px}}
+    /* Nine columns do not fit on a phone. Hide the reference ones so the
+       answer -- protected, how far from the stop, up or down -- is on screen
+       without a sideways scroll nobody knows is there. */
+    .positions-detail .sec{{display:none}}
+    .tabs{{position:fixed;left:10px;right:10px;bottom:10px;top:auto;margin:0;
+      height:var(--nav-height);padding:5px;z-index:50;border-radius:18px;
+      padding-bottom:max(5px,env(safe-area-inset-bottom))}}
+    .tab{{min-width:0;flex-direction:column;gap:1px;padding:6px 2px;font-size:9px;line-height:1.1}}
+    .tab svg{{width:18px;height:18px}}
+    .positions-summary th:nth-child(2),.positions-summary td:nth-child(2),
+    .positions-summary th:nth-child(3),.positions-summary td:nth-child(3){{display:none}}
+    .positions-summary td,.positions-summary th{{padding-left:8px;padding-right:8px}}
+    .ev{{font-size:12.5px}}
+    .verdict{{padding:15px;border-radius:16px}}
+    .banner{{padding:12px 14px;border-radius:14px}}
+  }}
+  @media (max-width:390px) {{
+    .wrap{{padding-left:12px;padding-right:12px}}
+    .mode{{padding:6px 9px}}
+    .iconbtn{{display:none}}
+    .tile{{padding:14px 12px}}
+    .tl{{font-size:10.5px}}
+    .tv{{font-size:20px}}
+  }}
+  @media (prefers-reduced-motion:reduce){{html{{scroll-behavior:auto}}*{{animation:none!important;transition:none!important}}}}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <h1>{_esc(title)}</h1>
-    <span class="mode {'live' if mode == 'LIVE' else ''}">{_esc(mode)}</span>
+    <div class="brand">
+      <span class="brandmark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 17l5-5 4 3 7-8"/><path d="M15 7h5v5"/>
+        </svg>
+      </span>
+      <div>
+        <h1>{_esc(title)}</h1>
+        <p class="subtitle">Automated swing-trading monitor</p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="iconbtn" id="refreshpage" type="button" aria-label="Refresh dashboard" title="Refresh dashboard">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M20 6v5h-5"/><path d="M4 18v-5h5"/><path d="M18.5 9A7 7 0 0 0 6.2 6.2L4 11M20 13l-2.2 4.8A7 7 0 0 1 5.5 15"/>
+        </svg>
+      </button>
+      <span class="mode {'live' if mode == 'LIVE' else ''}">{_esc(mode)}</span>
+    </div>
   </header>
 
-  <nav class="sitenav"><a href="./floor.html">How a run works &rarr;</a></nav>
+  <nav class="sitenav"><a href="./floor.html">See the execution flow <span aria-hidden="true">&rarr;</span></a></nav>
 
   <!-- One glance answers "is anything wrong". Sits above everything, because
        the answer has to be readable without scrolling or interpreting. -->
@@ -776,10 +883,22 @@ def build_html(state: dict = None, history: list = None,
   <div id="banners">{banner}</div>
 
   <div class="tabs" role="tablist">
-    <button class="tab" role="tab" data-panel="overview" aria-selected="true">Overview</button>
-    <button class="tab" role="tab" data-panel="positions" aria-selected="false">Positions</button>
-    <button class="tab" role="tab" data-panel="performance" aria-selected="false">Performance</button>
-    <button class="tab" role="tab" data-panel="rules" aria-selected="false">How it works</button>
+    <button class="tab" role="tab" data-panel="overview" aria-selected="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      <span>Overview</span>
+    </button>
+    <button class="tab" role="tab" data-panel="positions" aria-selected="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M4 19V9"/><path d="M10 19V5"/><path d="M16 19v-7"/><path d="M22 19H2"/></svg>
+      <span>Positions</span>
+    </button>
+    <button class="tab" role="tab" data-panel="performance" aria-selected="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M3 17l6-6 4 4 8-9"/><path d="M15 6h6v6"/></svg>
+      <span>Performance</span>
+    </button>
+    <button class="tab" role="tab" data-panel="rules" aria-selected="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+      <span>How it works</span>
+    </button>
   </div>
 
   <section class="panel" data-panel="overview">
@@ -863,8 +982,9 @@ def build_html(state: dict = None, history: list = None,
     if (isNaN(t)) return {{ text: "unknown", hrs: 1e9, sev: "critical" }};
     var hrs = (Date.now() - t) / 3600000;
     if (hrs < 0) hrs = 0;
+    var hours = Math.round(hrs);
     var text = hrs < 1 ? Math.round(hrs * 60) + " min ago"
-             : hrs < 48 ? Math.round(hrs) + " hours ago"
+             : hrs < 48 ? hours + (hours === 1 ? " hour ago" : " hours ago")
              : Math.round(hrs / 24) + " days ago";
     var sev = hrs < 30 ? "good" : (hrs < 96 ? "warning" : "critical");
     return {{ text: text, hrs: hrs, sev: sev }};
@@ -960,6 +1080,18 @@ def build_html(state: dict = None, history: list = None,
     }} else {{
       select();
     }}
+  }});
+}})();
+
+/* Manual refresh is useful when the dashboard is running from a phone's home
+   screen, where returning to the app does not always trigger a navigation. */
+(function () {{
+  var btn = document.getElementById('refreshpage');
+  if (!btn) return;
+  btn.addEventListener('click', function () {{
+    btn.classList.add('spinning');
+    btn.setAttribute('aria-label', 'Refreshing dashboard');
+    location.reload();
   }});
 }})();
 
