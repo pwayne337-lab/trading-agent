@@ -9,157 +9,268 @@
      bottom checks for a newer run and reloads past that cache. -->
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Agent">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#070b12">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./app-icon.svg" type="image/svg+xml">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <title>Trading agent</title>
 <style>
   :root {
-    color-scheme: light;
-    --surface-1:#fcfcfb; --plane:#f9f9f7;
-    --text-primary:#0b0b0b; --text-secondary:#52514e; --muted:#898781;
-    --gridline:#e1e0d9; --border:rgba(11,11,11,0.10);
-    --series-1:#2a78d6; --good:#006300; --critical:#d03b3b; --warning:#a86a00;
+    color-scheme:light;
+    --plane:#f3f5f8; --surface-1:#ffffff; --surface-2:#f7f9fc;
+    --surface-raised:#ffffff; --text-primary:#0b1220; --text-secondary:#48556a;
+    --muted:#7b8799; --gridline:#e8edf3; --border:rgba(15,23,42,.09);
+    --series-1:#2563eb; --series-soft:rgba(37,99,235,.10);
+    --good:#078352; --good-soft:rgba(7,131,82,.10);
+    --critical:#d23f4c; --critical-soft:rgba(210,63,76,.10);
+    --warning:#aa6800; --warning-soft:rgba(170,104,0,.10);
+    --shadow:0 1px 2px rgba(15,23,42,.04),0 12px 32px rgba(15,23,42,.06);
+    --nav-height:68px;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
       color-scheme: dark;
-      --surface-1:#1a1a19; --plane:#0d0d0d;
-      --text-primary:#fff; --text-secondary:#c3c2b7; --muted:#898781;
-      --gridline:#2c2c2a; --border:rgba(255,255,255,0.10);
-      --series-1:#3987e5; --good:#0ca30c; --critical:#e06060; --warning:#fab219;
+      --plane:#070b12; --surface-1:#0d131d; --surface-2:#111a27;
+      --surface-raised:#151e2c; --text-primary:#f6f8fb; --text-secondary:#aab5c5;
+      --muted:#738096; --gridline:#1b2635; --border:rgba(255,255,255,.085);
+      --series-1:#62a1ff; --series-soft:rgba(98,161,255,.11);
+      --good:#35d49a; --good-soft:rgba(53,212,154,.10);
+      --critical:#ff6b75; --critical-soft:rgba(255,107,117,.10);
+      --warning:#f3b54a; --warning-soft:rgba(243,181,74,.10);
+      --shadow:0 1px 2px rgba(0,0,0,.25),0 18px 45px rgba(0,0,0,.22);
     }
   }
   *{box-sizing:border-box}
-  body{margin:0;background:var(--plane);color:var(--text-primary);
-    font:15px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif;
-    -webkit-text-size-adjust:100%}
-  .wrap{max-width:900px;margin:0 auto;padding:20px 16px 56px}
-  header{display:flex;flex-wrap:wrap;gap:8px;align-items:baseline;
-    justify-content:space-between;margin-bottom:16px}
-  h1{font-size:20px;margin:0;letter-spacing:-0.01em}
-  .mode{font-size:11px;letter-spacing:.08em;text-transform:uppercase;
-    border:1px solid var(--border);border-radius:999px;padding:3px 10px;
-    color:var(--text-secondary)}
+  html{scroll-behavior:smooth}
+  body{margin:0;min-height:100vh;background:var(--plane);color:var(--text-primary);
+    font:15px/1.55 Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-text-size-adjust:100%;font-variant-numeric:tabular-nums}
+  body::before{content:"";position:fixed;inset:0 0 auto;height:360px;pointer-events:none;
+    background:radial-gradient(700px 300px at 50% -100px,var(--series-soft),transparent 72%);
+    z-index:-1}
+  button,a{-webkit-tap-highlight-color:transparent}
+  .wrap{max-width:1120px;margin:0 auto;padding:30px 28px 72px}
+  header{display:flex;gap:16px;align-items:center;justify-content:space-between;
+    margin-bottom:24px}
+  .brand{display:flex;align-items:center;gap:12px;min-width:0}
+  .brandmark{width:38px;height:38px;display:grid;place-items:center;flex:0 0 auto;
+    border-radius:12px;color:white;background:linear-gradient(145deg,#397cff,#2352ce);
+    box-shadow:0 10px 24px rgba(37,99,235,.28)}
+  .brandmark svg{width:22px;height:22px}
+  h1{font-size:18px;line-height:1.2;margin:0;letter-spacing:-.025em}
+  .subtitle{font-size:11.5px;color:var(--muted);margin:2px 0 0}
+  .header-actions{display:flex;align-items:center;gap:9px}
+  .iconbtn{appearance:none;width:36px;height:36px;display:grid;place-items:center;
+    border:1px solid var(--border);border-radius:11px;background:var(--surface-1);
+    color:var(--text-secondary);cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+  .iconbtn:hover{color:var(--series-1);border-color:var(--series-1)}
+  .iconbtn svg{width:17px;height:17px}
+  .iconbtn.spinning svg{animation:spin .65s ease}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .mode{display:inline-flex;align-items:center;gap:7px;font-size:10.5px;font-weight:700;
+    letter-spacing:.11em;text-transform:uppercase;border:1px solid var(--border);
+    border-radius:999px;padding:7px 11px;color:var(--text-secondary);background:var(--surface-1)}
+  .mode::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--good);
+    box-shadow:0 0 0 3px var(--good-soft)}
   .mode.live{color:var(--critical);border-color:var(--critical)}
-  h2{font-size:14px;margin:26px 0 9px;color:var(--text-secondary);font-weight:600}
-  .sitenav{margin:-6px 0 14px}
-  .sitenav a{font-size:12.5px;color:var(--muted);text-decoration:none;
-    border-bottom:1px solid var(--border);padding-bottom:2px}
-  .sitenav a:hover,.sitenav a:focus-visible{color:var(--series-1);
-    border-color:var(--series-1)}
-  .banner{border-radius:9px;padding:11px 14px;margin-bottom:14px;font-size:13.5px;
-    border:1px solid var(--border);background:var(--surface-1)}
-  .banner.critical{border-left:3px solid var(--critical)}
-  .banner.warning{border-left:3px solid var(--warning)}
-  .banner.info{border-left:3px solid var(--series-1)}
-  .tiles{display:grid;gap:9px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
-  .tile{background:var(--surface-1);border:1px solid var(--border);
-    border-radius:10px;padding:12px 14px}
-  .tl{color:var(--text-secondary);font-size:11.5px}
-  .tv{font-size:22px;font-weight:600;margin:3px 0 2px;letter-spacing:-0.02em}
-  .ts{color:var(--muted);font-size:11px}
+  .mode.live::before{background:var(--critical);box-shadow:0 0 0 3px var(--critical-soft)}
+  h2{font-size:17px;margin:34px 0 12px;color:var(--text-primary);font-weight:680;
+    letter-spacing:-.02em}
+  .sitenav{margin:-10px 0 20px;padding-left:50px}
+  .sitenav a{display:inline-flex;align-items:center;gap:5px;font-size:12px;
+    font-weight:600;color:var(--muted);text-decoration:none}
+  .sitenav a:hover,.sitenav a:focus-visible{color:var(--series-1)}
+  .banner{border-radius:14px;padding:13px 16px;margin-bottom:12px;font-size:13px;
+    line-height:1.55;border:1px solid var(--border);background:var(--surface-1);box-shadow:var(--shadow)}
+  .banner.critical{border-color:rgba(210,63,76,.28);background:var(--critical-soft)}
+  .banner.warning{border-color:rgba(170,104,0,.26);background:var(--warning-soft)}
+  .banner.info{border-color:rgba(37,99,235,.22);background:var(--series-soft)}
+  .tiles{display:grid;gap:12px;grid-template-columns:repeat(3,minmax(0,1fr))}
+  .tile{min-width:0;background:linear-gradient(145deg,var(--surface-1),var(--surface-2));
+    border:1px solid var(--border);border-radius:17px;padding:18px 19px;box-shadow:var(--shadow)}
+  .tl{color:var(--text-secondary);font-size:11.5px;font-weight:600}
+  .tv{font-size:clamp(22px,3vw,28px);line-height:1.16;font-weight:700;margin:7px 0 6px;
+    letter-spacing:-.035em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ts{color:var(--muted);font-size:11px;line-height:1.45}
   .tile.good .tv{color:var(--good)} .tile.bad .tv,.tile.critical .tv{color:var(--critical)}
   .tile.warning .tv{color:var(--warning)}
   .card{background:var(--surface-1);border:1px solid var(--border);
-    border-radius:10px;padding:14px;position:relative}
+    border-radius:18px;padding:18px;position:relative;box-shadow:var(--shadow)}
   .card.empty{color:var(--muted);font-size:13.5px}
-  .chart{width:100%;height:230px;display:block}
-  .tick{fill:var(--muted);font-size:11px;font-variant-numeric:tabular-nums}
+  .chart{width:100%;height:270px;display:block;overflow:visible}
+  .tick{fill:var(--muted);font-size:10px;font-variant-numeric:tabular-nums}
   .tip{position:absolute;pointer-events:none;opacity:0;background:var(--surface-1);
-    border:1px solid var(--border);border-radius:8px;padding:6px 9px;font-size:12px;
-    box-shadow:0 4px 14px rgba(0,0,0,.14);transition:opacity .1s;white-space:nowrap}
-  table{width:100%;border-collapse:collapse;font-size:13.5px}
-  th{text-align:left;color:var(--text-secondary);font-weight:500;
-    border-bottom:1px solid var(--border);padding:7px 8px;white-space:nowrap}
-  td{padding:8px;border-bottom:1px solid var(--gridline)}
+    border:1px solid var(--border);border-radius:10px;padding:7px 10px;font-size:11.5px;
+    box-shadow:0 10px 28px rgba(0,0,0,.18);transition:opacity .1s;white-space:nowrap}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;color:var(--muted);font-weight:650;text-transform:uppercase;
+    letter-spacing:.055em;font-size:9.5px;border-bottom:1px solid var(--border);
+    padding:5px 10px 11px;white-space:nowrap}
+  td{padding:13px 10px;border-bottom:1px solid var(--gridline)}
   tr:last-child td{border-bottom:none}
+  tbody tr{transition:background .15s ease}
+  tbody tr:hover{background:var(--surface-2)}
   .n{text-align:right;font-variant-numeric:tabular-nums}
   .pos{color:var(--good)} .neg{color:var(--critical)}
-  .scroll{overflow-x:auto}
+  .scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
   .events{list-style:none;margin:0;padding:0}
-  .ev{padding:9px 0;border-bottom:1px solid var(--gridline);font-size:13.5px}
+  .ev{padding:12px 2px;border-bottom:1px solid var(--gridline);font-size:13px}
   .ev:last-child{border-bottom:none}
   .ev.quiet{color:var(--muted)}
-  .tag{display:inline-block;font-size:10.5px;text-transform:uppercase;
-    letter-spacing:.06em;padding:2px 7px;border-radius:999px;margin-right:7px;
-    border:1px solid var(--border);color:var(--text-secondary)}
-  .ev.ok .tag{color:var(--good);border-color:var(--good)}
-  .ev.block .tag{color:var(--critical);border-color:var(--critical)}
-  .ev.sold .tag{color:var(--warning);border-color:var(--warning)}
-  .ev.fixed .tag{color:var(--good);border-color:var(--good)}
-  .verdict{display:flex;gap:10px;align-items:flex-start;margin:0 0 14px;
-    padding:12px 14px;border-radius:9px;font-size:14px;line-height:1.5;
-    border:1px solid var(--border);background:var(--surface-1)}
-  .verdict .dot{width:9px;height:9px;border-radius:50%;margin-top:6px;
-    flex:0 0 9px}
+  .tag{display:inline-flex;align-items:center;font-size:9.5px;font-weight:700;text-transform:uppercase;
+    letter-spacing:.07em;padding:3px 7px;border-radius:999px;margin-right:7px;
+    border:1px solid var(--border);color:var(--text-secondary);background:var(--surface-2)}
+  .ev.ok .tag{color:var(--good);border-color:transparent;background:var(--good-soft)}
+  .ev.block .tag{color:var(--critical);border-color:transparent;background:var(--critical-soft)}
+  .ev.sold .tag{color:var(--warning);border-color:transparent;background:var(--warning-soft)}
+  .ev.fixed .tag{color:var(--good);border-color:transparent;background:var(--good-soft)}
+  .verdict{display:flex;gap:14px;align-items:flex-start;margin:0 0 12px;
+    padding:18px;border-radius:18px;font-size:14px;line-height:1.5;
+    border:1px solid var(--border);background:var(--surface-1);box-shadow:var(--shadow)}
+  .verdict .dot{position:relative;width:11px;height:11px;border-radius:50%;margin-top:5px;flex:0 0 11px}
+  .verdict .dot::after{content:"";position:absolute;inset:-5px;border-radius:50%;opacity:.18;background:inherit}
   .verdict.ok .dot{background:var(--good)}
   .verdict.warning .dot{background:var(--warning)}
   .verdict.critical .dot{background:var(--critical)}
-  .verdict.ok{border-left:3px solid var(--good)}
-  .verdict.warning{border-left:3px solid var(--warning)}
-  .verdict.critical{border-left:3px solid var(--critical)}
-  .vsub{display:block;color:var(--muted);font-size:12.5px;margin-top:2px}
-  .copybtn{appearance:none;border:1px solid var(--border);background:var(--plane);
-    color:var(--text-primary);font:inherit;font-size:13px;padding:8px 14px;
-    border-radius:7px;cursor:pointer}
-  .copybtn:hover{border-color:var(--series-1);color:var(--series-1)}
+  .verdict.ok{border-color:rgba(7,131,82,.25)}
+  .verdict.warning{border-color:rgba(170,104,0,.28)}
+  .verdict.critical{border-color:rgba(210,63,76,.3)}
+  .verdict strong{font-size:15px;margin-right:3px}
+  .vsub{display:block;color:var(--muted);font-size:11.5px;margin-top:3px}
+  .copybtn{appearance:none;border:0;background:var(--series-1);color:white;font:inherit;
+    font-size:12.5px;font-weight:650;padding:9px 14px;border-radius:10px;cursor:pointer;
+    box-shadow:0 8px 20px var(--series-soft)}
+  .copybtn:hover{filter:brightness(1.08)}
   .copied{margin-left:9px;color:var(--good);font-size:12.5px}
   pre{white-space:pre-wrap;word-break:break-word;font-size:11.5px;
-    line-height:1.5;background:var(--plane);border:1px solid var(--gridline);
-    border-radius:7px;padding:10px;margin:8px 0 0;overflow-x:auto}
-  .tabs{display:flex;gap:4px;flex-wrap:wrap;margin:4px 0 18px;
-    border-bottom:1px solid var(--gridline)}
-  .tab{appearance:none;background:none;border:none;border-bottom:2px solid transparent;
-    color:var(--text-secondary);font:inherit;font-size:13.5px;padding:8px 12px;
-    cursor:pointer;border-radius:6px 6px 0 0}
-  .tab:hover{color:var(--text-primary);background:var(--plane)}
-  .tab[aria-selected="true"]{color:var(--series-1);border-bottom-color:var(--series-1);
-    font-weight:600}
-  .tab:focus-visible{outline:2px solid var(--series-1);outline-offset:-2px}
+    line-height:1.55;background:var(--surface-2);border:1px solid var(--gridline);
+    border-radius:11px;padding:12px;margin:10px 0 0;overflow-x:auto}
+  .tabs{position:sticky;top:10px;z-index:20;display:flex;gap:4px;margin:18px 0 24px;
+    padding:5px;border:1px solid var(--border);border-radius:14px;background:rgba(13,19,29,.82);
+    box-shadow:var(--shadow);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
+  @media (prefers-color-scheme:light){.tabs{background:rgba(255,255,255,.86)}}
+  .tab{appearance:none;flex:1;display:flex;align-items:center;justify-content:center;gap:7px;
+    background:none;border:none;color:var(--muted);font:inherit;font-size:12px;
+    font-weight:620;padding:9px 12px;cursor:pointer;border-radius:10px}
+  .tab svg{width:15px;height:15px;stroke-width:1.8}
+  .tab:hover{color:var(--text-primary);background:var(--surface-2)}
+  .tab[aria-selected="true"]{color:var(--series-1);background:var(--series-soft)}
+  .tab:focus-visible{outline:2px solid var(--series-1);outline-offset:1px}
   .panel h2:first-child{margin-top:0}
-  h3{font-size:14px;margin:20px 0 8px;color:var(--text-primary)}
+  h3{font-size:14px;margin:24px 0 9px;color:var(--text-primary)}
   .note{color:var(--muted);font-size:12.5px;line-height:1.6;margin:10px 0 0;
     max-width:70ch}
   .why{color:var(--text-secondary);font-size:12.5px;line-height:1.5}
   .warn-inline{color:var(--warning);font-size:11.5px}
   .muted-inline{color:var(--muted);font-size:11.5px}
   .brief p{margin:0 0 10px} .brief p:last-child{margin:0}
-  footer{margin-top:30px;color:var(--muted);font-size:11.5px;line-height:1.6}
+  footer{margin-top:42px;padding-top:20px;border-top:1px solid var(--gridline);
+    color:var(--muted);font-size:11px;line-height:1.7}
+  @media (max-width:700px) {
+    body::before{height:260px;background:radial-gradient(520px 230px at 45% -70px,var(--series-soft),transparent 75%)}
+    .wrap{padding:22px 16px calc(var(--nav-height) + 38px)}
+    header{margin-bottom:21px}
+    .brandmark{width:36px;height:36px;border-radius:11px}
+    .subtitle{display:none}
+    .sitenav{padding-left:48px;margin-top:-15px}
+    .tiles{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+    .tile{padding:15px 14px;border-radius:15px}
+    .tv{font-size:clamp(20px,6.1vw,27px)}
+    .ts{font-size:10.5px}
+    .chart{height:220px}
+    .card{padding:14px;border-radius:16px}
+    h2{font-size:16px;margin-top:30px}
+    /* Nine columns do not fit on a phone. Hide the reference ones so the
+       answer -- protected, how far from the stop, up or down -- is on screen
+       without a sideways scroll nobody knows is there. */
+    .positions-detail .sec{display:none}
+    .tabs{position:fixed;left:10px;right:10px;bottom:10px;top:auto;margin:0;
+      height:var(--nav-height);padding:5px;z-index:50;border-radius:18px;
+      padding-bottom:max(5px,env(safe-area-inset-bottom))}
+    .tab{min-width:0;flex-direction:column;gap:1px;padding:6px 2px;font-size:9px;line-height:1.1}
+    .tab svg{width:18px;height:18px}
+    .positions-summary th:nth-child(2),.positions-summary td:nth-child(2),
+    .positions-summary th:nth-child(3),.positions-summary td:nth-child(3){display:none}
+    .positions-summary td,.positions-summary th{padding-left:8px;padding-right:8px}
+    .ev{font-size:12.5px}
+    .verdict{padding:15px;border-radius:16px}
+    .banner{padding:12px 14px;border-radius:14px}
+  }
+  @media (max-width:390px) {
+    .wrap{padding-left:12px;padding-right:12px}
+    .mode{padding:6px 9px}
+    .iconbtn{display:none}
+    .tile{padding:14px 12px}
+    .tl{font-size:10.5px}
+    .tv{font-size:20px}
+  }
+  @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{animation:none!important;transition:none!important}}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <h1>Trading agent</h1>
-    <span class="mode ">PAPER</span>
+    <div class="brand">
+      <span class="brandmark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 17l5-5 4 3 7-8"/><path d="M15 7h5v5"/>
+        </svg>
+      </span>
+      <div>
+        <h1>Trading agent</h1>
+        <p class="subtitle">Automated swing-trading monitor</p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="iconbtn" id="refreshpage" type="button" aria-label="Refresh dashboard" title="Refresh dashboard">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M20 6v5h-5"/><path d="M4 18v-5h5"/><path d="M18.5 9A7 7 0 0 0 6.2 6.2L4 11M20 13l-2.2 4.8A7 7 0 0 1 5.5 15"/>
+        </svg>
+      </button>
+      <span class="mode ">PAPER</span>
+    </div>
   </header>
 
-  <nav class="sitenav"><a href="./floor.html">How a run works &rarr;</a></nav>
+  <nav class="sitenav"><a href="./floor.html">See the execution flow <span aria-hidden="true">&rarr;</span></a></nav>
 
   <!-- One glance answers "is anything wrong". Sits above everything, because
        the answer has to be readable without scrolling or interpreting. -->
-  <div class="verdict ok"><span class="dot"></span><div><strong>All good</strong> The agent is running and nothing needs you.<span class="vsub">Last traded 19 hours ago.</span></div></div>
+  <div class="verdict ok"><span class="dot"></span><div><strong>All good</strong> The agent is running and nothing needs you.<span class="vsub">Last traded 0 min ago.</span></div></div>
 
   <!-- Banners sit OUTSIDE the tabs on purpose. An unprotected position or a
        dead agent is not something to go looking for under a heading. -->
-  <div id="banners"><div class="banner info"><strong>Mid-session check.</strong> Positions, orders and the safety checks below were refreshed just now. Any signals and orders shown are from the last after-close run; this check does not trade.</div></div>
+  <div id="banners"></div>
 
   <div class="tabs" role="tablist">
-    <button class="tab" role="tab" data-panel="overview" aria-selected="true">Overview</button>
-    <button class="tab" role="tab" data-panel="positions" aria-selected="false">Positions</button>
-    <button class="tab" role="tab" data-panel="performance" aria-selected="false">Performance</button>
-    <button class="tab" role="tab" data-panel="rules" aria-selected="false">How it works</button>
+    <button class="tab" role="tab" data-panel="overview" aria-selected="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      <span>Overview</span>
+    </button>
+    <button class="tab" role="tab" data-panel="positions" aria-selected="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M4 19V9"/><path d="M10 19V5"/><path d="M16 19v-7"/><path d="M22 19H2"/></svg>
+      <span>Positions</span>
+    </button>
+    <button class="tab" role="tab" data-panel="performance" aria-selected="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M3 17l6-6 4 4 8-9"/><path d="M15 6h6v6"/></svg>
+      <span>Performance</span>
+    </button>
+    <button class="tab" role="tab" data-panel="rules" aria-selected="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+      <span>How it works</span>
+    </button>
   </div>
 
   <section class="panel" data-panel="overview">
-    <div class="tiles"><div class="tile "><div class="tl">Account equity</div><div class="tv">$98,046.89</div><div class="ts">paper account &middot; 7 run(s) recorded</div></div><div class="tile good"><div class="tl">Today</div><div class="tv">+0.69%</div><div class="ts">since the previous run</div></div><div class="tile bad"><div class="tl">Since start</div><div class="tv">-1.95%</div><div class="ts">of tracking</div></div><div class="tile bad"><div class="tl">Open positions</div><div class="tv">9</div><div class="ts">open P&amp;L $-1,190.66</div></div><div class="tile "><div class="tl">Cash</div><div class="tv">$-72.99</div><div class="ts">uninvested</div></div><div class="tile good" id="age-tile"><div class="tl">Last run</div><div class="tv" id="age-val">0 min ago</div><div class="ts">2 order(s), 0 blocked</div></div></div>
+    <div class="tiles"><div class="tile "><div class="tl">Account equity</div><div class="tv">$98,366.05</div><div class="ts">paper account &middot; 8 run(s) recorded</div></div><div class="tile bad"><div class="tl">Today</div><div class="tv">-0.65%</div><div class="ts">since the previous run</div></div><div class="tile bad"><div class="tl">Since start</div><div class="tv">-1.63%</div><div class="ts">of tracking</div></div><div class="tile bad"><div class="tl">Open positions</div><div class="tv">9</div><div class="ts">open P&amp;L $-870.93</div></div><div class="tile "><div class="tl">Cash</div><div class="tv">$-72.99</div><div class="ts">uninvested</div></div><div class="tile good" id="age-tile"><div class="tl">Last run</div><div class="tv" id="age-val">0 min ago</div><div class="ts">1 order(s), 0 blocked</div></div></div>
 
     <h2>Account equity</h2>
     <div class="card" id="c1"><svg viewBox="0 0 920 280" class="chart" role="img" preserveAspectRatio="none">
   <line x1="62" y1="250.0" x2="904" y2="250.0" stroke="var(--gridline)" stroke-width="1"/><line x1="62" y1="191.5" x2="904" y2="191.5" stroke="var(--gridline)" stroke-width="1"/><line x1="62" y1="133.0" x2="904" y2="133.0" stroke="var(--gridline)" stroke-width="1"/><line x1="62" y1="74.5" x2="904" y2="74.5" stroke="var(--gridline)" stroke-width="1"/><line x1="62" y1="16.0" x2="904" y2="16.0" stroke="var(--gridline)" stroke-width="1"/>
-  
-  <polyline points="62.00,32.14 202.33,54.74 342.67,43.13 483.00,76.17 623.33,137.83 763.67,233.86 904.00,151.84" fill="none" stroke="var(--series-1)" stroke-width="2"
+  <polygon points="62.00,250.00 62.00,32.14 182.29,54.74 302.57,43.13 422.86,76.17 543.14,137.83 663.43,233.86 783.71,151.84 904.00,229.05 904.00,250.00" fill="var(--series-1)" opacity="0.14"/>
+  <polyline points="62.00,32.14 182.29,54.74 302.57,43.13 422.86,76.17 543.14,137.83 663.43,233.86 783.71,151.84 904.00,229.05" fill="none" stroke="var(--series-1)" stroke-width="2"
             stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
-  <text x="54" y="254.0" text-anchor="end" class="tick">$98,192</text><text x="54" y="195.5" text-anchor="end" class="tick">$98,678</text><text x="54" y="137.0" text-anchor="end" class="tick">$99,163</text><text x="54" y="78.5" text-anchor="end" class="tick">$99,648</text><text x="54" y="20.0" text-anchor="end" class="tick">$100,134</text><text x="62.0" y="272" text-anchor="start" class="tick">09-03</text><text x="483.0" y="272" text-anchor="middle" class="tick">09-08</text><text x="904.0" y="272" text-anchor="end" class="tick">09-14</text>
+  <text x="54" y="254.0" text-anchor="end" class="tick">$98,192</text><text x="54" y="195.5" text-anchor="end" class="tick">$98,678</text><text x="54" y="137.0" text-anchor="end" class="tick">$99,163</text><text x="54" y="78.5" text-anchor="end" class="tick">$99,648</text><text x="54" y="20.0" text-anchor="end" class="tick">$100,134</text><text x="62.0" y="272" text-anchor="start" class="tick">09-03</text><text x="543.1" y="272" text-anchor="middle" class="tick">09-09</text><text x="904.0" y="272" text-anchor="end" class="tick">09-15</text>
   <line class="crosshair" x1="0" y1="16" x2="0" y2="250"
         stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 3" opacity="0"/>
   <circle class="cursor-dot" r="4" fill="var(--series-1)" stroke="var(--surface-1)"
@@ -167,10 +278,10 @@
 </svg><div class="tip" id="t1"></div></div>
 
     <h2>Open positions</h2>
-    <div class="card scroll"><table><thead><tr><th>Symbol</th><th class="n">Shares</th><th class="n">Avg cost</th><th class="n">Value</th><th class="n">Open P&amp;L</th></tr></thead><tbody><tr><td><strong>AAPL</strong></td><td class='n'>56</td><td class='n'>$327.42</td><td class='n'>$18,479.44</td><td class='n pos'>$+143.70</td></tr><tr><td><strong>ABNB</strong></td><td class='n'>71</td><td class='n'>$167.80</td><td class='n'>$11,921.61</td><td class='n pos'>$+7.47</td></tr><tr><td><strong>ABT</strong></td><td class='n'>142</td><td class='n'>$104.88</td><td class='n'>$14,476.19</td><td class='n neg'>$-416.39</td></tr><tr><td><strong>AMAT</strong></td><td class='n'>17</td><td class='n'>$426.28</td><td class='n'>$7,140.94</td><td class='n neg'>$-105.83</td></tr><tr><td><strong>AMGN</strong></td><td class='n'>33</td><td class='n'>$383.80</td><td class='n'>$12,391.00</td><td class='n neg'>$-274.39</td></tr><tr><td><strong>AMZN</strong></td><td class='n'>1</td><td class='n'>$250.27</td><td class='n'>$248.10</td><td class='n neg'>$-2.17</td></tr><tr><td><strong>APD</strong></td><td class='n'>39</td><td class='n'>$295.00</td><td class='n'>$11,218.16</td><td class='n neg'>$-286.85</td></tr><tr><td><strong>CL</strong></td><td class='n'>224</td><td class='n'>$88.24</td><td class='n'>$19,486.88</td><td class='n neg'>$-278.88</td></tr><tr><td><strong>DDOG</strong></td><td class='n'>12</td><td class='n'>$227.86</td><td class='n'>$2,757.00</td><td class='n pos'>$+22.68</td></tr></tbody></table></div>
+    <div class="card scroll positions-summary"><table><thead><tr><th>Symbol</th><th class="n">Shares</th><th class="n">Avg cost</th><th class="n">Value</th><th class="n">Open P&amp;L</th></tr></thead><tbody><tr><td><strong>AAPL</strong></td><td class='n'>56</td><td class='n'>$327.42</td><td class='n'>$18,584.59</td><td class='n pos'>$+248.85</td></tr><tr><td><strong>ABNB</strong></td><td class='n'>71</td><td class='n'>$167.80</td><td class='n'>$11,950.72</td><td class='n pos'>$+36.58</td></tr><tr><td><strong>ABT</strong></td><td class='n'>142</td><td class='n'>$104.88</td><td class='n'>$14,488.26</td><td class='n neg'>$-404.32</td></tr><tr><td><strong>AMAT</strong></td><td class='n'>17</td><td class='n'>$426.28</td><td class='n'>$7,165.50</td><td class='n neg'>$-81.26</td></tr><tr><td><strong>AMGN</strong></td><td class='n'>33</td><td class='n'>$383.80</td><td class='n'>$12,419.22</td><td class='n neg'>$-246.18</td></tr><tr><td><strong>AMZN</strong></td><td class='n'>1</td><td class='n'>$250.27</td><td class='n'>$248.16</td><td class='n neg'>$-2.11</td></tr><tr><td><strong>APD</strong></td><td class='n'>39</td><td class='n'>$295.00</td><td class='n'>$11,333.40</td><td class='n neg'>$-171.60</td></tr><tr><td><strong>CL</strong></td><td class='n'>224</td><td class='n'>$88.24</td><td class='n'>$19,488.00</td><td class='n neg'>$-277.76</td></tr><tr><td><strong>DDOG</strong></td><td class='n'>12</td><td class='n'>$227.86</td><td class='n'>$2,761.20</td><td class='n pos'>$+26.88</td></tr></tbody></table></div>
 
     <h2>What the agent did on its last run</h2>
-    <div class="card"><ul class="events"><li class="ev sold"><span class="tag">sold</span> <strong>ADP</strong> bounce complete: closed at $276.63, back above the 10-day average of $274.33, P&amp;L $+302.81</li><li class="ev ok"><span class="tag">bought</span> <strong>AMAT</strong> <span class="tag">reversion</span> 17 sh, stop $367.96, target $536.70, risking $956.17</li><li class="ev ok"><span class="tag">bought</span> <strong>DDOG</strong> <span class="tag">pullback</span> 12 sh, stop $201.99, target $286.18, risking $336.78</li><li class="ev skip"><span class="tag">skipped</span> <strong>BAC</strong> risking $148.47, under the $247.52 minimum for a trade (25% of a normal position) -- only $2,792 of the 100% exposure cap was left to size it with</li><li class="ev skip"><span class="tag">skipped</span> <strong>CB</strong> risking $78.39, under the $247.52 minimum for a trade (25% of a normal position) -- only $2,792 of the 100% exposure cap was left to size it with</li><li class="ev skip"><span class="tag">skipped</span> <strong>CMG</strong> risking $111.35, under the $247.52 minimum for a trade (25% of a normal position) -- only $2,792 of the 100% exposure cap was left to size it with</li><li class="ev skip"><span class="tag">skipped</span> <strong>FCX</strong> no room left: $31 of the 100% exposure cap is unspent, which will not buy one share at $69.34</li><li class="ev skip"><span class="tag">skipped</span> <strong>GILD</strong> no room left: $31 of the 100% exposure cap is unspent, which will not buy one share at $146.41</li><li class="ev skip"><span class="tag">skipped</span> <strong>GM</strong> no room left: $31 of the 100% exposure cap is unspent, which will not buy one share at $87.16</li><li class="ev skip"><span class="tag">skipped</span> <strong>GOOGL</strong> no room left: $31 of the 100% exposure cap is unspent, which will not buy one share at $349.39</li><li class="ev skip"><span class="tag">skipped</span> <strong>HYG</strong> no room left: $31 of the 100% exposure cap is unspent, which will not buy one share at $78.53</li><li class="ev skip"><span class="tag">skipped</span> <strong>KO</strong> no room left: $31 of the 100% exposure cap is unspent, which will not buy one share at $89.35</li><li class="ev skip"><span class="tag">skipped</span> <strong>LRCX</strong> no room left: $31 of the 100% exposure cap is unspent, which will not buy one share at $273.49</li><li class="ev skip"><span class="tag">skipped</span> <strong>MU</strong> no room left: $31 of the 100% exposure cap is unspent, which will not buy one share at $924.03</li><li class="ev skip"><span class="tag">skipped</span> <strong>NVDA</strong> no room left: $31 of the 100% exposure cap is unspent, which will not buy one share at $210.96</li><li class="ev skip"><span class="tag">skipped</span> <strong>PANW</strong> no room left: $31 of the 100% exposure cap is unspent, which will not buy one share at $373.94</li><li class="ev skip"><span class="tag">skipped</span> <strong>RTX</strong> no room left: $31 of the 100% exposure cap is unspent, which will not buy one share at $195.34</li><li class="ev skip"><span class="tag">skipped</span> <strong>SLB</strong> no room left: $31 of the 100% exposure cap is unspent, which will not buy one share at $53.32</li><li class="ev skip"><span class="tag">skipped</span> <strong>SPOT</strong> no room left: $31 of the 100% exposure cap is unspent, which will not buy one share at $556.31</li><li class="ev skip"><span class="tag">skipped</span> <strong>TGT</strong> no room left: $31 of the 100% exposure cap is unspent, which will not buy one share at $158.70</li><li class="ev skip"><span class="tag">skipped</span> <strong>V</strong> no room left: $31 of the 100% exposure cap is unspent, which will not buy one share at $375.28</li><li class="ev skip"><span class="tag">skipped</span> <strong>WDAY</strong> no room left: $31 of the 100% exposure cap is unspent, which will not buy one share at $194.21</li></ul></div>
+    <div class="card"><ul class="events"><li class="ev sold"><span class="tag">sold</span> <strong>DDOG</strong> trend break: closed at $230.27, below the 50-day average of $245.43, P&amp;L $+26.88</li><li class="ev ok"><span class="tag">bought</span> <strong>FCX</strong> <span class="tag">reversion</span> 38 sh, stop $61.52, target $85.10, risking $298.76</li><li class="ev skip"><span class="tag">skipped</span> <strong>ANET</strong> risking $98.26, under the $245.92 minimum for a trade (25% of a normal position) -- only $2,688 of the 100% exposure cap was left to size it with</li><li class="ev skip"><span class="tag">skipped</span> <strong>BAC</strong> risking $144.11, under the $245.92 minimum for a trade (25% of a normal position) -- only $2,688 of the 100% exposure cap was left to size it with</li><li class="ev skip"><span class="tag">skipped</span> <strong>COP</strong> risking $123.77, under the $245.92 minimum for a trade (25% of a normal position) -- only $2,688 of the 100% exposure cap was left to size it with</li><li class="ev skip"><span class="tag">skipped</span> <strong>CVX</strong> risking $106.25, under the $245.92 minimum for a trade (25% of a normal position) -- only $2,688 of the 100% exposure cap was left to size it with</li><li class="ev skip"><span class="tag">skipped</span> <strong>D</strong> risking $115.79, under the $245.92 minimum for a trade (25% of a normal position) -- only $2,688 of the 100% exposure cap was left to size it with</li><li class="ev skip"><span class="tag">skipped</span> <strong>DHR</strong> risking $130.22, under the $245.92 minimum for a trade (25% of a normal position) -- only $2,688 of the 100% exposure cap was left to size it with</li><li class="ev skip"><span class="tag">skipped</span> <strong>EOG</strong> risking $126.36, under the $245.92 minimum for a trade (25% of a normal position) -- only $2,688 of the 100% exposure cap was left to size it with</li><li class="ev skip"><span class="tag">skipped</span> <strong>GS</strong> no room left: $52 of the 100% exposure cap is unspent, which will not buy one share at $976.67</li><li class="ev skip"><span class="tag">skipped</span> <strong>HYG</strong> no room left: $52 of the 100% exposure cap is unspent, which will not buy one share at $78.38</li><li class="ev skip"><span class="tag">skipped</span> <strong>IWM</strong> no room left: $52 of the 100% exposure cap is unspent, which will not buy one share at $285.14</li><li class="ev skip"><span class="tag">skipped</span> <strong>LRCX</strong> no room left: $52 of the 100% exposure cap is unspent, which will not buy one share at $270.87</li><li class="ev skip"><span class="tag">skipped</span> <strong>MPC</strong> no room left: $52 of the 100% exposure cap is unspent, which will not buy one share at $410.84</li><li class="ev skip"><span class="tag">skipped</span> <strong>MS</strong> no room left: $52 of the 100% exposure cap is unspent, which will not buy one share at $206.28</li><li class="ev skip"><span class="tag">skipped</span> <strong>NEM</strong> no room left: $52 of the 100% exposure cap is unspent, which will not buy one share at $124.19</li><li class="ev skip"><span class="tag">skipped</span> <strong>NUE</strong> no room left: $52 of the 100% exposure cap is unspent, which will not buy one share at $258.82</li><li class="ev skip"><span class="tag">skipped</span> <strong>PFE</strong> risking $1.37, under the $245.92 minimum for a trade (25% of a normal position) -- only $52 of the 100% exposure cap was left to size it with</li><li class="ev skip"><span class="tag">skipped</span> <strong>PSX</strong> no room left: $52 of the 100% exposure cap is unspent, which will not buy one share at $264.93</li><li class="ev skip"><span class="tag">skipped</span> <strong>TMO</strong> no room left: $52 of the 100% exposure cap is unspent, which will not buy one share at $641.39</li><li class="ev skip"><span class="tag">skipped</span> <strong>XLE</strong> no room left: $52 of the 100% exposure cap is unspent, which will not buy one share at $65.93</li><li class="ev skip"><span class="tag">skipped</span> <strong>XOM</strong> no room left: $52 of the 100% exposure cap is unspent, which will not buy one share at $169.32</li></ul></div>
 
     <h2>Briefing</h2>
     <div class="card brief"><p>Research is off. Add ANTHROPIC_API_KEY to your .env file to get a written briefing here.</p></div>
@@ -186,33 +297,32 @@
       <details style="margin-top:10px">
         <summary class="note" style="cursor:pointer">See what gets copied</summary>
         <pre id="reporttext">AGENT DIAGNOSTIC REPORT
-page built     : 2026-09-15T19:36:44+00:00
-figures from   : 2026-09-15T19:36:44+00:00
-last full run  : 2026-09-14T23:56:17+00:00
+page built     : 2026-09-15T23:35:39+00:00
+figures from   : 2026-09-15T23:35:39+00:00
+last full run  : 2026-09-15T23:35:39+00:00
 mode           : PAPER
 healthy flag   : True
-this write was : a mid-session check
-equity         : 98046.89
+this write was : a trading run
+equity         : 98366.05
 cash           : -72.99
 positions      : 9
 
 ERRORS (0):
   none
 
-CHECKS (2):
-  [info] reconcile: new since last run: AMAT, DDOG
-  [info] reconcile: closed since last run: ADP
+CHECKS (0):
+  none
 
 POSITIONS:
-  AAPL: 56 sh @ 327.423929, stop 309.11, P/L 143.699976, opened by pullback
-  ABNB: 71 sh @ 167.804789, stop 158.13, P/L 7.469981, opened by reversion
-  ABT: 142 sh @ 104.877324, stop 98.79, P/L -416.390008, opened by reversion
-  AMAT: 17 sh @ 426.28, stop 367.96, P/L -105.825, opened by reversion
-  AMGN: 33 sh @ 383.8, stop 353.44, P/L -274.395, opened by reversion
-  AMZN: 1 sh @ 250.27, stop 239.74, P/L -2.17, opened by reversion
-  APD: 39 sh @ 295.0, stop 278.46, P/L -286.845, opened by reversion
-  CL: 224 sh @ 88.24, stop 84.64, P/L -278.88, opened by reversion
-  DDOG: 12 sh @ 227.86, stop 201.99, P/L 22.68, opened by pullback
+  AAPL: 56 sh @ 327.423929, stop 309.11, P/L 248.845576, opened by pullback
+  ABNB: 71 sh @ 167.804789, stop 158.13, P/L 36.579981, opened by reversion
+  ABT: 142 sh @ 104.877324, stop 98.79, P/L -404.320008, opened by reversion
+  AMAT: 17 sh @ 426.28, stop 367.96, P/L -81.2583, opened by reversion
+  AMGN: 33 sh @ 383.8, stop 353.44, P/L -246.18, opened by reversion
+  AMZN: 1 sh @ 250.27, stop 239.74, P/L -2.1141, opened by reversion
+  APD: 39 sh @ 295.0, stop 278.46, P/L -171.6, opened by reversion
+  CL: 224 sh @ 88.24, stop 84.64, P/L -277.76, opened by reversion
+  DDOG: 12 sh @ 227.86, stop 201.99, P/L 26.88, opened by ?
 
 SCHEDULE (UTC, weekdays):
   14-21 hourly  refresh the page (no trading)
@@ -227,15 +337,15 @@ Paste this to Claude with what you saw on the page.</pre>
 
   <section class="panel" data-panel="positions" hidden>
     <h2>What you are holding</h2>
-    <div class="card scroll"><table><thead><tr><th>Symbol</th><th class="n">Shares</th><th class="n">Entry</th><th class="n">Last</th><th class="n">Stop</th><th class="n">To stop</th><th class="n">At risk</th><th class="n">R</th><th class="n">Open P&amp;L</th></tr></thead><tbody><tr><td><strong>AAPL</strong> <span class="tag">pullback</span></td><td class='n'>56</td><td class='n'>$327.42</td><td class='n'>$329.99</td><td class='n'>$309.11</td><td class='n'>6.3%</td><td class='n'>$1,169</td><td class='n'>+0.14R</td><td class='n pos'>$+143.70</td></tr><tr><td><strong>ABNB</strong> <span class="tag">reversion</span></td><td class='n'>71</td><td class='n'>$167.80</td><td class='n'>$167.91</td><td class='n'>$158.13</td><td class='n'>5.8%</td><td class='n'>$694</td><td class='n'>+0.01R</td><td class='n pos'>$+7.47</td></tr><tr><td><strong>ABT</strong> <span class="tag">reversion</span></td><td class='n'>142</td><td class='n'>$104.88</td><td class='n'>$101.95</td><td class='n'>$98.79</td><td class='n'>3.1%</td><td class='n'>$448</td><td class='n'>-0.48R</td><td class='n neg'>$-416.39</td></tr><tr><td><strong>AMAT</strong> <span class="tag">reversion</span></td><td class='n'>17</td><td class='n'>$426.28</td><td class='n'>$420.06</td><td class='n'>$367.96</td><td class='n'>12.4%</td><td class='n'>$886</td><td class='n'>-0.11R</td><td class='n neg'>$-105.83</td></tr><tr><td><strong>AMGN</strong> <span class="tag">reversion</span></td><td class='n'>33</td><td class='n'>$383.80</td><td class='n'>$375.48</td><td class='n'>$353.44</td><td class='n'>5.9%</td><td class='n'>$727</td><td class='n'>-0.27R</td><td class='n neg'>$-274.39</td></tr><tr><td><strong>AMZN</strong> <span class="tag">reversion</span></td><td class='n'>1</td><td class='n'>$250.27</td><td class='n'>$248.10</td><td class='n'>$239.74</td><td class='n'>3.4%</td><td class='n'>$8</td><td class='n'>-0.21R</td><td class='n neg'>$-2.17</td></tr><tr><td><strong>APD</strong> <span class="tag">reversion</span></td><td class='n'>39</td><td class='n'>$295.00</td><td class='n'>$287.65</td><td class='n'>$278.46</td><td class='n'>3.2%</td><td class='n'>$358</td><td class='n'>-0.44R</td><td class='n neg'>$-286.85</td></tr><tr><td><strong>CL</strong> <span class="tag">reversion</span></td><td class='n'>224</td><td class='n'>$88.24</td><td class='n'>$87.00</td><td class='n'>$84.64</td><td class='n'>2.7%</td><td class='n'>$528</td><td class='n'>-0.35R</td><td class='n neg'>$-278.88</td></tr><tr><td><strong>DDOG</strong> <span class="tag">pullback</span></td><td class='n'>12</td><td class='n'>$227.86</td><td class='n'>$229.75</td><td class='n'>$201.99</td><td class='n'>12.1%</td><td class='n'>$333</td><td class='n'>+0.07R</td><td class='n pos'>$+22.68</td></tr></tbody></table></div><p class="note">"At risk" is what this position loses from here if its stop is hit. "R" is the profit measured in units of the risk originally taken, so +1R means it has made back exactly what it was prepared to lose.</p>
+    <div class="card scroll positions-detail"><table><thead><tr><th>Symbol</th><th class="n sec">Shares</th><th class="n sec">Entry</th><th class="n sec">Last</th><th class="n">Stop</th><th class="n">To stop</th><th class="n sec">At risk</th><th class="n sec">R</th><th class="n">Open P&amp;L</th></tr></thead><tbody><tr><td><strong>AAPL</strong> <span class="tag">pullback</span></td><td class='n sec'>56</td><td class='n sec'>$327.42</td><td class='n sec'>$331.87</td><td class='n'>$309.11</td><td class='n'>6.9%</td><td class='n sec'>$1,274</td><td class='n sec'>+0.24R</td><td class='n pos'>$+248.85</td></tr><tr><td><strong>ABNB</strong> <span class="tag">reversion</span></td><td class='n sec'>71</td><td class='n sec'>$167.80</td><td class='n sec'>$168.32</td><td class='n'>$158.13</td><td class='n'>6.1%</td><td class='n sec'>$723</td><td class='n sec'>+0.05R</td><td class='n pos'>$+36.58</td></tr><tr><td><strong>ABT</strong> <span class="tag">reversion</span></td><td class='n sec'>142</td><td class='n sec'>$104.88</td><td class='n sec'>$102.03</td><td class='n'>$98.79</td><td class='n'>3.2%</td><td class='n sec'>$460</td><td class='n sec'>-0.47R</td><td class='n neg'>$-404.32</td></tr><tr><td><strong>AMAT</strong> <span class="tag">reversion</span></td><td class='n sec'>17</td><td class='n sec'>$426.28</td><td class='n sec'>$421.50</td><td class='n'>$367.96</td><td class='n'>12.7%</td><td class='n sec'>$910</td><td class='n sec'>-0.08R</td><td class='n neg'>$-81.26</td></tr><tr><td><strong>AMGN</strong> <span class="tag">reversion</span></td><td class='n sec'>33</td><td class='n sec'>$383.80</td><td class='n sec'>$376.34</td><td class='n'>$353.44</td><td class='n'>6.1%</td><td class='n sec'>$756</td><td class='n sec'>-0.25R</td><td class='n neg'>$-246.18</td></tr><tr><td><strong>AMZN</strong> <span class="tag">reversion</span></td><td class='n sec'>1</td><td class='n sec'>$250.27</td><td class='n sec'>$248.16</td><td class='n'>$239.74</td><td class='n'>3.4%</td><td class='n sec'>$8</td><td class='n sec'>-0.20R</td><td class='n neg'>$-2.11</td></tr><tr><td><strong>APD</strong> <span class="tag">reversion</span></td><td class='n sec'>39</td><td class='n sec'>$295.00</td><td class='n sec'>$290.60</td><td class='n'>$278.46</td><td class='n'>4.2%</td><td class='n sec'>$473</td><td class='n sec'>-0.27R</td><td class='n neg'>$-171.60</td></tr><tr><td><strong>CL</strong> <span class="tag">reversion</span></td><td class='n sec'>224</td><td class='n sec'>$88.24</td><td class='n sec'>$87.00</td><td class='n'>$84.64</td><td class='n'>2.7%</td><td class='n sec'>$529</td><td class='n sec'>-0.34R</td><td class='n neg'>$-277.76</td></tr><tr><td><strong>DDOG</strong></td><td class='n sec'>12</td><td class='n sec'>$227.86</td><td class='n sec'>$230.10</td><td class='n'>$201.99</td><td class='n'>12.2%</td><td class='n sec'>$337</td><td class='n sec'>+0.09R</td><td class='n pos'>$+26.88</td></tr></tbody></table></div><p class="note">"At risk" is what this position loses from here if its stop is hit. "R" is the profit measured in units of the risk originally taken, so +1R means it has made back exactly what it was prepared to lose.</p>
   </section>
 
   <section class="panel" data-panel="performance" hidden>
     <h2>Closed trades</h2>
-    <div class="tiles"><div class="tile "><div class="tl">Closed trades</div><div class="tv">6</div><div class="ts"></div></div><div class="tile "><div class="tl">Win rate</div><div class="tv">17%</div><div class="ts">1 of 6</div></div><div class="tile bad"><div class="tl">Net P&L</div><div class="tv">$-968.93</div><div class="ts"></div></div><div class="tile "><div class="tl">Average win</div><div class="tv">$1.44</div><div class="ts"></div></div><div class="tile "><div class="tl">Average loss</div><div class="tv">$-194.07</div><div class="ts"></div></div><div class="tile "><div class="tl">Profit factor</div><div class="tv">0.00</div><div class="ts">made per $1 lost</div></div></div><h3>By exit reason</h3><div class="card scroll"><table><thead><tr><th>Why it closed</th><th class="n">Trades</th><th class="n">P&amp;L</th></tr></thead><tbody><tr><td>sold</td><td class='n'>6</td><td class='n neg'>$-968.93</td></tr></tbody></table></div><p class="note">Counted from the 6 closed trades on record. That is far too few to judge a strategy by &mdash; a run of luck either way swamps it at this size. Treat it as a record of what happened, not evidence of what will.</p>
+    <div class="tiles"><div class="tile "><div class="tl">Closed trades</div><div class="tv">7</div><div class="ts"></div></div><div class="tile "><div class="tl">Win rate</div><div class="tv">29%</div><div class="ts">2 of 7</div></div><div class="tile bad"><div class="tl">Net P&L</div><div class="tv">$-761.32</div><div class="ts"></div></div><div class="tile "><div class="tl">Average win</div><div class="tv">$104.53</div><div class="ts"></div></div><div class="tile "><div class="tl">Average loss</div><div class="tv">$-194.07</div><div class="ts"></div></div><div class="tile "><div class="tl">Profit factor</div><div class="tv">0.22</div><div class="ts">made per $1 lost</div></div></div><h3>By exit reason</h3><div class="card scroll"><table><thead><tr><th>Why it closed</th><th class="n">Trades</th><th class="n">P&amp;L</th></tr></thead><tbody><tr><td>sold</td><td class='n'>7</td><td class='n neg'>$-761.32</td></tr></tbody></table></div><p class="note">Counted from the 7 closed trades on record. That is far too few to judge a strategy by &mdash; a run of luck either way swamps it at this size. Treat it as a record of what happened, not evidence of what will.</p>
 
     <h2>Recently closed</h2>
-    <div class="card scroll"><table><thead><tr><th>Symbol</th><th>Closed</th><th>Why</th><th class="n">P&amp;L</th></tr></thead><tbody><tr><td><strong>JCI</strong></td><td>2026-09-11</td><td>sold</td><td class='n neg'>$-62.92</td></tr><tr><td><strong>JCI</strong></td><td>2026-09-11</td><td>sold</td><td class='n neg'>$-246.84</td></tr><tr><td><strong>QQQ</strong></td><td>2026-09-11</td><td>sold</td><td class='n neg'>$-131.58</td></tr><tr><td><strong>KLAC</strong></td><td>2026-09-09</td><td>sold</td><td class='n pos'>$+1.44</td></tr><tr><td><strong>DIA</strong></td><td>2026-09-09</td><td>sold</td><td class='n neg'>$-520.94</td></tr><tr><td><strong>KLAC</strong></td><td>2026-09-09</td><td>sold</td><td class='n neg'>$-8.09</td></tr></tbody></table></div>
+    <div class="card scroll"><table><thead><tr><th>Symbol</th><th>Closed</th><th>Why</th><th class="n">P&amp;L</th></tr></thead><tbody><tr><td><strong>ADP</strong></td><td>2026-09-15</td><td>sold</td><td class='n pos'>$+207.61</td></tr><tr><td><strong>JCI</strong></td><td>2026-09-11</td><td>sold</td><td class='n neg'>$-62.92</td></tr><tr><td><strong>JCI</strong></td><td>2026-09-11</td><td>sold</td><td class='n neg'>$-246.84</td></tr><tr><td><strong>QQQ</strong></td><td>2026-09-11</td><td>sold</td><td class='n neg'>$-131.58</td></tr><tr><td><strong>KLAC</strong></td><td>2026-09-09</td><td>sold</td><td class='n pos'>$+1.44</td></tr><tr><td><strong>DIA</strong></td><td>2026-09-09</td><td>sold</td><td class='n neg'>$-520.94</td></tr><tr><td><strong>KLAC</strong></td><td>2026-09-09</td><td>sold</td><td class='n neg'>$-8.09</td></tr></tbody></table></div>
   </section>
 
   <section class="panel" data-panel="rules" hidden>
@@ -244,7 +354,7 @@ Paste this to Claude with what you saw on the page.</pre>
   </section>
 
   <footer>
-    Generated 2026-09-15T19:36:44+00:00 UTC from the agent's own run records.
+    Generated 2026-09-15T23:35:39+00:00 UTC from the agent's own run records.
     Numbers update only when the agent runs; this page does not poll anything.<br>
     A paper account is fake money. Results here are not a prediction of what
     real money would do, and past results do not tell you what comes next.
@@ -267,8 +377,8 @@ Paste this to Claude with what you saw on the page.</pre>
       cache.
 --------------------------------------------------------------------------- */
 (function () {
-  var BUILT = "2026-09-15T19:36:44+00:00";
-  var DATED = "2026-09-15T19:36:44+00:00";
+  var BUILT = "2026-09-15T23:35:39+00:00";
+  var DATED = "2026-09-15T23:35:39+00:00";
 
   function ageParts(iso) {
     if (!iso) return { text: "never run", hrs: 1e9, sev: "warning" };
@@ -276,8 +386,9 @@ Paste this to Claude with what you saw on the page.</pre>
     if (isNaN(t)) return { text: "unknown", hrs: 1e9, sev: "critical" };
     var hrs = (Date.now() - t) / 3600000;
     if (hrs < 0) hrs = 0;
+    var hours = Math.round(hrs);
     var text = hrs < 1 ? Math.round(hrs * 60) + " min ago"
-             : hrs < 48 ? Math.round(hrs) + " hours ago"
+             : hrs < 48 ? hours + (hours === 1 ? " hour ago" : " hours ago")
              : Math.round(hrs / 24) + " days ago";
     var sev = hrs < 30 ? "good" : (hrs < 96 ? "warning" : "critical");
     return { text: text, hrs: hrs, sev: sev };
@@ -376,6 +487,18 @@ Paste this to Claude with what you saw on the page.</pre>
   });
 })();
 
+/* Manual refresh is useful when the dashboard is running from a phone's home
+   screen, where returning to the app does not always trigger a navigation. */
+(function () {
+  var btn = document.getElementById('refreshpage');
+  if (!btn) return;
+  btn.addEventListener('click', function () {
+    btn.classList.add('spinning');
+    btn.setAttribute('aria-label', 'Refreshing dashboard');
+    location.reload();
+  });
+})();
+
 /* ---------------------------------------------------------------------------
    Tabs. The panel lives in the URL hash so a view can be linked to and
    survives the reload the freshness check performs -- landing someone back on
@@ -427,7 +550,7 @@ Paste this to Claude with what you saw on the page.</pre>
 })();
 
 (function(){
-  var pts = [{"x": 62.0, "y": 32.14, "d": "09-03", "v": 100000.0}, {"x": 202.33, "y": 54.74, "d": "09-04", "v": 99812.49}, {"x": 342.67, "y": 43.13, "d": "09-07", "v": 99908.75}, {"x": 483.0, "y": 76.17, "d": "09-08", "v": 99634.63}, {"x": 623.33, "y": 137.83, "d": "09-09", "v": 99123.03}, {"x": 763.67, "y": 233.86, "d": "09-10", "v": 98326.16}, {"x": 904.0, "y": 151.84, "d": "09-14", "v": 99006.78}];
+  var pts = [{"x": 62.0, "y": 32.14, "d": "09-03", "v": 100000.0}, {"x": 182.29, "y": 54.74, "d": "09-04", "v": 99812.49}, {"x": 302.57, "y": 43.13, "d": "09-07", "v": 99908.75}, {"x": 422.86, "y": 76.17, "d": "09-08", "v": 99634.63}, {"x": 543.14, "y": 137.83, "d": "09-09", "v": 99123.03}, {"x": 663.43, "y": 233.86, "d": "09-10", "v": 98326.16}, {"x": 783.71, "y": 151.84, "d": "09-14", "v": 99006.78}, {"x": 904.0, "y": 229.05, "d": "09-15", "v": 98366.05}];
   var card = document.getElementById('c1'), tip = document.getElementById('t1');
   if (!card || !pts.length) return;
   var svg = card.querySelector('svg');
