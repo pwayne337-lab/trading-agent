@@ -1,0 +1,7 @@
+{
+  "_readme": "Copy to config/overrides.json, or let the hub write it. Only list what you are changing; everything else stays on the defaults in tbot/config.py. Keys starting with an underscore are ignored. Bounds are enforced in tbot/overrides.py.",
+  "risk": { "risk_per_trade": 0.0075 },
+  "strategy": { "rank_by": "momentum" },
+  "gate": { "hold_flagged": true },
+  "watchlist": { "add": ["PLTR"], "remove": [] }
+}

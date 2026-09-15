@@ -302,6 +302,76 @@ whether the code does what it claims: no lookahead, correct sizing math, fills
 at the right bar, losses close to the 1R that was intended. Run it after any
 change.
 
+## Approving trades from the hub
+
+The agent is autonomous. A setup that passes sizing, the correlation check and
+the research screen cleanly is submitted exactly as it always was. What changed
+is what happens to the trades it was *not* sure about, which until now were
+discarded with a line in the log. They are now **held for you**:
+
+| Held when | Setting in `GateConfig` |
+|---|---|
+| research vetoed it | `hold_vetoed` — the veto becomes something you can overrule |
+| research flagged it without vetoing | `hold_flagged` — the one setting that can cost you a trade you would otherwise have got |
+| the research layer could not run | `hold_research_outage` |
+| it risks more than N× a normal unit | `hold_above_risk_fraction` (0 = off) |
+
+Held trades are written to `state/pending.json` and **not traded by the evening
+run**. You answer from the hub, which writes `state/decisions.json`. The
+`submit-approved` workflow runs at 12:45 and 13:15 UTC on weekdays, before the
+open in either season, and sends only what you approved — as the same GTC
+bracket the evening run would have sent, so it fills at the same open.
+
+Waiting costs nothing in execution for exactly that reason. What it does cost is
+attention: **a proposal you never answer expires untaken at the open it was
+priced for.** The morning job refuses an expired batch outright, because a
+market order against a stop and target from an overtaken session is a different
+trade from the one you were shown.
+
+```bash
+python agent.py pending            # what is waiting on you, without touching the broker
+python agent.py submit-approved    # dry run: what would go in
+```
+
+`submit-approved` re-checks every approval against the **live** account before
+sending it — position count, gross exposure, correlation against what is held
+now, whether the symbol is already owned or already has an order working —
+because equity and holdings move overnight. Every check can drop a trade; none
+can create or enlarge one.
+
+To turn the whole thing off and get the old behaviour back, set
+`gate.enabled` to false. Either in `tbot/config.py`, or from the hub.
+
+## Changing settings from the hub
+
+`config/overrides.json` is a sparse overlay on `tbot/config.py`: only the
+values you have moved off the defaults, so it reads as a list of your decisions.
+The hub writes it; the agent reads it on every command, including `backtest`,
+so a backtest tests the configuration actually in force. Command-line flags
+still win over it.
+
+```json
+{
+  "risk": { "risk_per_trade": 0.0075, "max_open_positions": 12 },
+  "strategy": { "rank_by": "momentum" },
+  "watchlist": { "add": ["PLTR"], "remove": ["FISV"] }
+}
+```
+
+The bounds live in `tbot/overrides.py`, not in the hub. A value outside them is
+clamped on load and reported on the dashboard as a config note, so a browser
+form (or anyone who has got hold of the hub's passphrase) cannot set
+`risk_per_trade` to 0.9 and have it honoured. `allow_live_trading` is not an
+editable setting and never will be: the paper/live switch stays in this file,
+in this repo, behind the three locks described above.
+
+```bash
+python agent.py schema             # the editable fields and their bounds, as the hub sees them
+```
+
+The hub itself lives in a separate repository. See its README for how the
+worker that does the writing is deployed.
+
 ## Things this does not do yet
 
 - No options. Options add spreads, expiration, and Greeks, and a naive bot

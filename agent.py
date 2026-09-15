@@ -37,6 +37,8 @@ from tbot.config import DEFAULT_WATCHLIST, AgentConfig
 from tbot.dashboard import write_dashboard
 from tbot.research import Researcher, screen
 from tbot.risk import DrawdownMonitor, correlation_block, size_position
+from tbot import overrides
+from tbot import pending as pendingmod
 from tbot import ranking
 from tbot import watch
 from tbot.strategy import exit_decision, latest_signal, prepare, trend_state
@@ -55,8 +57,26 @@ def load_dotenv():
         os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
 
 
+# Anything the overrides file changed, clamped or refused on the most recent
+# build_config call. The run copies these into its state so the dashboard can
+# show that a setting you edited is not the setting in force.
+CONFIG_NOTES: list = []
+
+
 def build_config(args) -> AgentConfig:
-    cfg = AgentConfig()
+    """Defaults from config.py, then the hub's overrides, then the command line.
+
+    That order is deliberate. The overrides file is a standing preference and
+    belongs under an explicit flag: `--risk 0.5` typed into a terminal is a
+    decision about this one invocation and should win over a setting changed on
+    a dashboard three weeks ago.
+
+    It applies to every command, not just the trading run, so a backtest tests
+    the configuration actually in force rather than the defaults.
+    """
+    cfg, notes = overrides.apply(AgentConfig())
+    CONFIG_NOTES[:] = notes
+
     if getattr(args, "equity", None):
         cfg.risk.starting_equity = args.equity
     if getattr(args, "risk", None):
@@ -767,8 +787,10 @@ def _cmd_run(args):
     # happened yet would set the trend filter, the entries and the exits. The
     # backtest never sees a partial bar and neither should this. A run during
     # the session reports and stops.
+    clock = {}
     try:
-        market_open = bool(broker.clock().get("is_open"))
+        clock = broker.clock() or {}
+        market_open = bool(clock.get("is_open"))
     except (BrokerError, AttributeError) as exc:
         # The account and the positions were read successfully seconds ago, so
         # a failure here is the clock endpoint specifically. Assuming "closed"
@@ -1086,6 +1108,15 @@ def _cmd_run(args):
         print(f"Ranking {len(ranked)} candidates by {cfg.strategy.rank_by}: "
               f"{', '.join(ranked)}\n")
 
+    # Trades held for a person, and the session they are meant for. The expiry
+    # is the broker's own next_open, so an early close or an exchange holiday
+    # is handled by the calendar that actually governs the fill rather than by
+    # arithmetic here.
+    proposals = []
+    next_open = clock.get("next_open")
+    session = (str(next_open)[:10] if next_open
+               else datetime.now(timezone.utc).date().isoformat())
+
     for sym in ranked:
         sig = by_symbol[sym]
         df = bars[sym]
@@ -1108,7 +1139,37 @@ def _cmd_run(args):
 
         verdict = screen(sym, order.entry, order.stop, order.target,
                          researcher, cfg.research)
+
+        # Trades the agent was not sure about wait for a person instead of
+        # being thrown away. This run still does not trade them: a held
+        # proposal is submitted only by the morning job, and only if you
+        # approved it before the open it was priced for.
+        held = pendingmod.flag_reasons(verdict, order, equity, cfg)
+        if held:
+            proposal = pendingmod.build_proposal(
+                session, sym, sig, order, verdict, held)
+            proposals.append(proposal)
+            print(f"  {sym}: HELD for approval, {held[0]}")
+            if verdict.veto:
+                # Still recorded as a veto. The dashboard's veto list is the
+                # history of what research blocked, and a held trade that you
+                # never answer was blocked in the end.
+                st["vetoes"].append({"symbol": sym, "reason": verdict.reason,
+                                     "flags": verdict.flags,
+                                     "source": verdict.source, "held": True})
+            # The caps advance for a held trade as they do for a submitted one.
+            # Approving four proposals tomorrow must not quietly breach a limit
+            # this run sized every one of them against as though it were free.
+            # The morning job re-checks all of it against the live account
+            # anyway, because equity and position count move overnight.
+            committed.add(sym)
+            open_count += 1
+            gross += order.notional
+            continue
+
         if verdict.veto:
+            # Reached only with the gate off, or hold_vetoed off: the original
+            # behaviour, where a veto ends the trade then and there.
             print(f"  {sym}: BLOCKED by research, {verdict.reason}")
             st["vetoes"].append({"symbol": sym, "reason": verdict.reason,
                                  "flags": verdict.flags, "source": verdict.source})
@@ -1150,10 +1211,23 @@ def _cmd_run(args):
                                  "strategy": sig.strategy})
             strat_map[sym] = sig.strategy
 
-    if not (st["orders"] or st["signals"] or st["vetoes"]):
+    # Write the batch even when it is empty. An empty pending file is the
+    # positive statement "this run held nothing back", which is what lets the
+    # hub distinguish it from a run that never got this far and left
+    # yesterday's proposals sitting there looking current.
+    expires_at = str(next_open) if next_open else None
+    st["pending"] = proposals
+    st["pending_expires_at"] = expires_at
+    pendingmod.save_pending(proposals, session, expires_at, notes=CONFIG_NOTES)
+    if proposals:
+        print(f"\n  {len(proposals)} trade(s) held for your approval. "
+              f"They expire at the open on {session}.")
+
+    if not (st["orders"] or st["signals"] or st["vetoes"] or proposals):
         print("  No setups met the rules today.")
 
     try:
+        st["config_notes"] = list(CONFIG_NOTES)
         st["recent_trades"] = broker.realized_trades(limit=20)
     except BrokerError as exc:
         st["errors"].append(f"could not read trade history: {exc}")
@@ -1194,6 +1268,231 @@ def _cmd_run(args):
     print(f"{len(st['orders'])} order(s) submitted." if args.submit
           else "Dry run. Nothing was sent. Add --submit to place paper orders.")
     print(f"Dashboard: {page}")
+
+
+def cmd_submit_approved(args):
+    """Place the trades you approved, and nothing else.
+
+    This is the other half of the approval gate. The evening run decides what
+    it is unsure about and writes it to state/pending.json without trading it.
+    You answer in the hub, which writes state/decisions.json. This job runs
+    before the next open, takes only the proposals you said yes to, and sends
+    them as the same GTC bracket the evening run would have sent -- so an
+    approved trade fills at the open it was priced for.
+
+    It scans nothing and it decides nothing. The only judgement it makes is
+    refusal: every check below can drop a trade, none can create one or
+    enlarge one. A proposal that cannot be fully re-verified is skipped, on the
+    principle this system uses everywhere else -- a missed trade costs nothing
+    but opportunity, and an unchecked one can cost the account.
+    """
+    cfg = build_config(args)
+    broker = AlpacaBroker(dry_run=not args.submit)
+
+    print(describe_safety(broker, cfg))
+    if broker.is_live and not (cfg.allow_live_trading and args.i_understand_the_risk):
+        print("\nRefusing to touch a LIVE account without both locks open.")
+        return
+
+    res = pendingmod.resolve()
+    print(f"\nPending batch for session {res['session'] or 'unknown'}: "
+          f"{pendingmod.summarise(res)}")
+
+    if res["batch_expired"]:
+        # The proposals were priced off one signal bar for one specific open.
+        # Submitting them a day late would send market orders against stops and
+        # targets computed from a session that has already been overtaken.
+        print(f"\nThis batch expired at {res['expires_at']}. "
+              f"Nothing will be submitted.")
+        for p in res["expired"]:
+            print(f"  {p['symbol']}: expired unanswered"
+                  if not p.get("decision") else
+                  f"  {p['symbol']}: expired before it could be submitted")
+        return
+
+    if not res["approved"]:
+        print("\nNothing approved. Nothing to do.")
+        return
+
+    # --- the live picture, not the one the proposals were written against ---
+    try:
+        acct = broker.account()
+        positions = broker.positions()
+        open_orders = broker.open_orders()
+    except BrokerError as exc:
+        print(f"\nCould not read the account: {exc}. Submitting nothing.")
+        return
+
+    equity = acct["equity"]
+    # Both halves count as already owned. An accepted order that has not filled
+    # yet still becomes a position at the open, so treating only filled
+    # positions as "held" is how the same trade goes in twice.
+    held, working = committed_symbols(positions, open_orders)
+    gross = sum(abs(p.get("market_value", 0.0)) for p in positions)
+
+    # An approved proposal is a market order intended for the open. Sent once
+    # the session is running it fills at whatever the tape says right now,
+    # which is a different trade from the one that was approved.
+    try:
+        if bool((broker.clock() or {}).get("is_open")) and not args.ignore_session:
+            print("\nThe market is already open. These proposals were priced "
+                  "for the open, so submitting them now would fill them "
+                  "somewhere else. Pass --ignore-session to override.")
+            return
+    except (BrokerError, AttributeError) as exc:
+        print(f"\nCould not read the market clock: {exc}. Submitting nothing.")
+        return
+
+    # Correlation has to be re-checked rather than trusted from last night: the
+    # point of it is what is held NOW, and an overnight stop-out changes that.
+    # Cached bars are enough -- it reads daily returns, and today's bar does
+    # not exist yet anyway.
+    symbols = sorted({p["symbol"] for p in res["approved"]} | held)
+    returns = None
+    try:
+        bars = datamod.load_universe(symbols, refresh=False)
+        if bars:
+            returns = pd.DataFrame(
+                {s: d["close"].pct_change() for s, d in bars.items()})
+    except Exception as exc:
+        print(f"  (could not load price history for the correlation check: {exc})")
+
+    st = state.load_state() or state.blank_state()
+    st.setdefault("orders", [])
+    st.setdefault("errors", [])
+    submitted, refused = [], []
+    strat_map = dict(st.get("strategy_by_symbol") or {})
+
+    print(f"\n{len(res['approved'])} approved proposal(s):")
+    for p in res["approved"]:
+        sym = p["symbol"]
+
+        def drop(why):
+            print(f"  {sym}: SKIPPED, {why}")
+            refused.append({**p, "refused_because": why})
+
+        # Already on. The evening run advanced its own counters for held
+        # proposals, but a position opened by any other path -- a manual order,
+        # a repeated run -- would be doubled by submitting this.
+        if sym in held:
+            drop("already holding it")
+            continue
+        if sym in working:
+            drop("an order for it is already working at the broker")
+            continue
+
+        # The caps, against tonight's account rather than last night's.
+        if len(held) + len(submitted) >= cfg.risk.max_open_positions:
+            drop(f"at the {cfg.risk.max_open_positions} position limit")
+            continue
+        notional = float(p.get("notional") or 0.0)
+        if equity > 0 and (gross + notional) / equity > cfg.risk.max_gross_exposure:
+            drop(f"would take gross exposure past "
+                 f"{cfg.risk.max_gross_exposure:.0%} of equity")
+            continue
+
+        if returns is not None:
+            dup = correlation_block(sym, held | {x["symbol"] for x in submitted},
+                                    returns, cfg.risk.correlation_window,
+                                    cfg.risk.max_correlation)
+            if dup:
+                drop(dup)
+                continue
+
+        # Shape checks. These should never fire on a file this agent wrote, so
+        # if one does, the file was edited by something else and the trade is
+        # not going in on trust.
+        shares, entry = int(p.get("shares") or 0), float(p.get("entry") or 0)
+        stop, target = float(p.get("stop") or 0), float(p.get("target") or 0)
+        if shares < 1 or not (0 < stop < entry < target):
+            drop(f"the proposal does not describe a sane long trade "
+                 f"({shares} sh, stop {stop}, entry {entry}, target {target})")
+            continue
+
+        try:
+            fill = broker.submit_bracket(
+                sym, shares, stop, target,
+                allow_live=cfg.allow_live_trading,
+                acknowledged=args.i_understand_the_risk)
+        except BrokerError as exc:
+            drop(f"the broker rejected it: {exc}")
+            st["errors"].append(f"approved order rejected for {sym}: {exc}")
+            continue
+
+        decided = (p.get("decision") or {}).get("at", "")
+        print(f"  {sym}: [{p['strategy']}] {fill.status} {fill.detail or ''} "
+              f"({shares} sh, risking ${p.get('dollars_at_risk', 0):,.2f})"
+              + (f" — approved {decided}" if decided else ""))
+        gross += notional
+        if fill.submitted:
+            record = {"symbol": sym, "shares": shares, "stop": stop,
+                      "target": target,
+                      "dollars_at_risk": p.get("dollars_at_risk"),
+                      "order_id": fill.order_id, "strategy": p["strategy"],
+                      "from_proposal": p["id"]}
+            submitted.append(record)
+            st["orders"].append(record)
+            strat_map[sym] = p["strategy"]
+
+    st["strategy_by_symbol"] = strat_map
+    st["approved_submitted"] = submitted
+    st["approved_refused"] = refused
+
+    # Settled proposals are consumed; unanswered ones are not. Leaving an
+    # approval in place would let a later run submit the same trade twice, but
+    # clearing the whole batch would silently discard a proposal you simply had
+    # not got to yet -- and it stays valid right up to the open it was priced
+    # for. So the job can run more than once before the bell and each pass only
+    # takes what has been answered since the last one.
+    remaining = [{k: v for k, v in p.items() if k != "decision"}
+                 for p in res["undecided"]]
+    pendingmod.save_pending(remaining, res["session"], res["expires_at"],
+                            notes=[f"{len(submitted)} submitted, "
+                                   f"{len(refused)} refused, "
+                                   f"{len(remaining)} still awaiting an answer"])
+
+    # NOT full_run. The "last traded" marker tracks whether the evening scan is
+    # still happening; letting this job refresh it would hide a daily run that
+    # had silently stopped.
+    state.save_state(st)
+    page = write_dashboard()
+
+    print(f"\n{len(submitted)} approved order(s) submitted." if args.submit
+          else f"\nDry run. Nothing was sent. "
+               f"{len(submitted)} would have gone in. Add --submit to place them.")
+    print(f"Dashboard: {page}")
+
+
+def cmd_pending(args):
+    """Show what is waiting on you, without touching the broker."""
+    res = pendingmod.resolve()
+    doc = pendingmod.load_pending()
+    print(f"Session {res['session'] or 'unknown'}, "
+          f"expires {res['expires_at'] or 'never'}")
+    if res["batch_expired"]:
+        print("This batch has EXPIRED. Nothing in it can be submitted.")
+    print(f"{pendingmod.summarise(res)}\n")
+
+    for bucket in ("approved", "undecided", "rejected", "expired"):
+        for p in res[bucket]:
+            print(f"  [{bucket:9}] {p['symbol']:<6} {p['strategy']:<10} "
+                  f"{p['shares']} sh, entry {p['entry']}, stop {p['stop']}, "
+                  f"target {p['target']}")
+            for why in p.get("held_because", []):
+                print(f"              held: {why}")
+    for n in doc.get("notes", []):
+        print(f"  note: {n}")
+
+
+def cmd_schema(args):
+    """Emit the settings schema the hub renders its form from.
+
+    Printing it rather than keeping a second copy in the hub is what stops the
+    two drifting: a field the agent will not accept cannot appear on the form,
+    because the form is built from this.
+    """
+    import json as _json
+    print(_json.dumps(overrides.schema(), indent=2))
 
 
 def cmd_compare(args):
@@ -1488,6 +1787,24 @@ def main():
     mo.add_argument("--i-understand-the-risk", action="store_true",
                     help="third safety lock, required only for live accounts")
     mo.set_defaults(func=cmd_monitor)
+
+    sa = sub.add_parser("submit-approved",
+                        help="place the trades you approved in the hub")
+    common(sa, start="2023-01-01")
+    sa.add_argument("--submit", action="store_true",
+                    help="actually send the approved orders")
+    sa.add_argument("--i-understand-the-risk", action="store_true",
+                    help="third safety lock, required only for live accounts")
+    sa.add_argument("--ignore-session", action="store_true",
+                    help="submit even though the market is already open")
+    sa.set_defaults(func=cmd_submit_approved)
+
+    pd_ = sub.add_parser("pending", help="what is waiting on a decision from you")
+    pd_.set_defaults(func=cmd_pending)
+
+    sc = sub.add_parser("schema",
+                        help="the settings the hub may edit, as JSON")
+    sc.set_defaults(func=cmd_schema)
 
     rf = sub.add_parser("refresh",
                         help="re-read the account and repaint the page only")

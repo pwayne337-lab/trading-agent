@@ -1,0 +1,110 @@
+# Places the trades you approved in the hub, and nothing else.
+#
+# The evening run decides what it is unsure about, writes it to
+# state/pending.json, and does NOT trade it. You answer from the dashboard,
+# which writes state/decisions.json. This job runs before the next open and
+# sends only the proposals you said yes to.
+#
+# Why an approval costs nothing in execution. Entries are market orders with
+# time in force GTC. The daily run submits them after the close and they fill
+# at the next session's open. Submitted here, an hour before that same open,
+# they fill at that same open on the same terms. The gate inserts a person into
+# the loop without moving the fill.
+#
+# This job scans nothing and decides nothing. Every check in `submit-approved`
+# can drop a trade; none can create one or enlarge one.
+name: Submit approved trades
+
+on:
+  # 12:45 and 13:15 UTC on weekdays. The US open is 13:30 UTC in summer and
+  # 14:30 in winter, so both passes land before the bell in either season.
+  #
+  # Twice, not once, because a proposal is answered by a person: approving at
+  # 08:00 in New York would miss a single 12:45 pass and lose a trade that was
+  # still perfectly valid. Each pass takes only what has been answered since
+  # the last one, so running twice cannot submit anything twice.
+  schedule:
+    - cron: "45 12 * * 1-5"
+    - cron: "15 13 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: write      # to commit the settled batch back to the repo
+  pages: write         # to republish the dashboard
+  id-token: write
+
+concurrency:
+  # The same group as the daily run and the protect job. All of them touch the
+  # same order book, and two of them reading it at once could each decide a
+  # position needs something the other is already placing.
+  group: daily-agent
+  cancel-in-progress: false
+
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # This job places orders, so it earns the same scrutiny as the one that
+      # trades. A broken engine must not get to act on an approval either.
+      - name: Verify the engine before letting it place anything
+        run: python -m tests.test_logic
+
+      - name: Verify the whole path against a fake broker
+        run: python -m tests.smoke_run
+
+      - name: Submit what was approved
+        env:
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_API_SECRET: ${{ secrets.ALPACA_API_SECRET }}
+          ALPACA_BASE_URL: ${{ secrets.ALPACA_BASE_URL }}
+        run: python agent.py submit-approved --submit
+
+      - name: Commit the settled batch
+        if: always()
+        run: |
+          git config user.name "trading-agent"
+          git config user.email "actions@github.com"
+          mkdir -p state site
+          git add -A state site
+          git diff --staged --quiet && exit 0
+          git commit -m "submit approved $(date -u +%Y-%m-%dT%H:%M)"
+          # A hub decision landing between checkout and now makes this a
+          # non-fast-forward push. Failing there would discard the record of
+          # orders that have already gone in.
+          for i in 1 2 3; do
+            git push && exit 0
+            git pull --rebase --autostash || break
+          done
+          exit 1
+
+      # A push made with GITHUB_TOKEN does not trigger other workflows, so
+      # pages.yml never fires for the commit above. Deploy from inside here for
+      # the same reason daily.yml and protect-now.yml do.
+      - uses: actions/upload-pages-artifact@v3
+        if: always()
+        with:
+          path: site
+
+  publish:
+    needs: submit
+    if: always()
+    runs-on: ubuntu-latest
+    concurrency:
+      group: pages-deploy
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

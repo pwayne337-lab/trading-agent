@@ -1,0 +1,277 @@
+{
+  "updated_at": "2026-09-15T19:36:44+00:00",
+  "last_full_run": "2026-09-14T23:56:17+00:00",
+  "mode": "paper",
+  "healthy": true,
+  "carried_from": null,
+  "carried_reason": "",
+  "positions": [
+    {
+      "symbol": "AAPL",
+      "shares": 56,
+      "avg_entry": 327.423929,
+      "market_value": 18479.44,
+      "unrealized_pl": 143.699976,
+      "stop": 309.11,
+      "target": 361.49,
+      "stop_shares": 56,
+      "stop_checked": true
+    },
+    {
+      "symbol": "ABNB",
+      "shares": 71,
+      "avg_entry": 167.804789,
+      "market_value": 11921.61,
+      "unrealized_pl": 7.469981,
+      "stop": 158.13,
+      "target": 197.25,
+      "stop_shares": 71,
+      "stop_checked": true
+    },
+    {
+      "symbol": "ABT",
+      "shares": 142,
+      "avg_entry": 104.877324,
+      "market_value": 14476.19,
+      "unrealized_pl": -416.390008,
+      "stop": 98.79,
+      "target": 119.14,
+      "stop_shares": 142,
+      "stop_checked": true
+    },
+    {
+      "symbol": "AMAT",
+      "shares": 17,
+      "avg_entry": 426.28,
+      "market_value": 7140.935,
+      "unrealized_pl": -105.825,
+      "stop": 367.96,
+      "target": 536.7,
+      "stop_shares": 17,
+      "stop_checked": true
+    },
+    {
+      "symbol": "AMGN",
+      "shares": 33,
+      "avg_entry": 383.8,
+      "market_value": 12391.005,
+      "unrealized_pl": -274.395,
+      "stop": 353.44,
+      "target": 440.53,
+      "stop_shares": 33,
+      "stop_checked": true
+    },
+    {
+      "symbol": "AMZN",
+      "shares": 1,
+      "avg_entry": 250.27,
+      "market_value": 248.1,
+      "unrealized_pl": -2.17,
+      "stop": 239.74,
+      "target": 284.75,
+      "stop_shares": 1,
+      "stop_checked": true
+    },
+    {
+      "symbol": "APD",
+      "shares": 39,
+      "avg_entry": 295.0,
+      "market_value": 11218.155,
+      "unrealized_pl": -286.845,
+      "stop": 278.46,
+      "target": 324.02,
+      "stop_shares": 39,
+      "stop_checked": true
+    },
+    {
+      "symbol": "CL",
+      "shares": 224,
+      "avg_entry": 88.24,
+      "market_value": 19486.88,
+      "unrealized_pl": -278.88,
+      "stop": 84.64,
+      "target": 97.66,
+      "stop_shares": 224,
+      "stop_checked": true
+    },
+    {
+      "symbol": "DDOG",
+      "shares": 12,
+      "avg_entry": 227.86,
+      "market_value": 2757.0,
+      "unrealized_pl": 22.68,
+      "stop": 201.99,
+      "target": 286.18,
+      "stop_shares": 12,
+      "stop_checked": true
+    }
+  ],
+  "signals": [
+    {
+      "symbol": "AMAT",
+      "entry": 424.21,
+      "stop": 367.9647,
+      "target": 536.7006,
+      "shares": 17,
+      "strategy": "reversion",
+      "why": "RSI(2) at 7, below the 10-day average; stop 2.50x ATR below entry"
+    },
+    {
+      "symbol": "DDOG",
+      "entry": 230.05,
+      "stop": 201.9852,
+      "target": 286.1796,
+      "shares": 12,
+      "strategy": "pullback",
+      "why": "pullback to the 20 EMA, reclaimed; stop 2.24x ATR below entry"
+    }
+  ],
+  "orders": [
+    {
+      "symbol": "AMAT",
+      "shares": 17,
+      "stop": 367.9647,
+      "target": 536.7006,
+      "dollars_at_risk": 956.17,
+      "order_id": "6be61c54-2af7-4c37-ba30-1f690b161117",
+      "strategy": "reversion"
+    },
+    {
+      "symbol": "DDOG",
+      "shares": 12,
+      "stop": 201.9852,
+      "target": 286.1796,
+      "dollars_at_risk": 336.78,
+      "order_id": "49ea30df-d414-44a6-991d-0099846c9a02",
+      "strategy": "pullback"
+    }
+  ],
+  "exits": [
+    {
+      "symbol": "ADP",
+      "reason": "bounce complete: closed at $276.63, back above the 10-day average of $274.33",
+      "status": "accepted",
+      "unrealized_pl": 302.80999
+    }
+  ],
+  "protected": [],
+  "vetoes": [],
+  "findings": [
+    {
+      "severity": "info",
+      "agent": "reconcile",
+      "message": "new since last run: AMAT, DDOG"
+    },
+    {
+      "severity": "info",
+      "agent": "reconcile",
+      "message": "closed since last run: ADP"
+    }
+  ],
+  "errors": [],
+  "briefing": "Research is off. Add ANTHROPIC_API_KEY to your .env file to get a written briefing here.",
+  "recent_trades": [
+    {
+      "symbol": "JCI",
+      "closed": "2026-09-11",
+      "shares": 26,
+      "avg_cost": 146.42,
+      "exit": 144.0,
+      "pnl": -62.92,
+      "reason": "sold"
+    },
+    {
+      "symbol": "JCI",
+      "closed": "2026-09-11",
+      "shares": 102,
+      "avg_cost": 146.42,
+      "exit": 144.0,
+      "pnl": -246.84,
+      "reason": "sold"
+    },
+    {
+      "symbol": "QQQ",
+      "closed": "2026-09-11",
+      "shares": 34,
+      "avg_cost": 718.85,
+      "exit": 714.98,
+      "pnl": -131.58,
+      "reason": "sold"
+    },
+    {
+      "symbol": "KLAC",
+      "closed": "2026-09-09",
+      "shares": 1,
+      "avg_cost": 187.75,
+      "exit": 189.19,
+      "pnl": 1.44,
+      "reason": "sold"
+    },
+    {
+      "symbol": "DIA",
+      "closed": "2026-09-09",
+      "shares": 46,
+      "avg_cost": 536.14,
+      "exit": 524.82,
+      "pnl": -520.94,
+      "reason": "sold"
+    },
+    {
+      "symbol": "KLAC",
+      "closed": "2026-09-09",
+      "shares": 50,
+      "avg_cost": 188.61,
+      "exit": 188.45,
+      "pnl": -8.09,
+      "reason": "sold"
+    }
+  ],
+  "research": {
+    "llm_calls": 0,
+    "llm_errors": 0,
+    "enabled": false
+  },
+  "strategy_by_symbol": {
+    "CL": "reversion",
+    "ABNB": "reversion",
+    "ABT": "reversion",
+    "AMZN": "reversion",
+    "AAPL": "pullback",
+    "AMGN": "reversion",
+    "APD": "reversion",
+    "AMAT": "reversion",
+    "DDOG": "pullback"
+  },
+  "pending": [],
+  "pending_expires_at": null,
+  "config_notes": [],
+  "approved_submitted": [],
+  "approved_refused": [],
+  "account": {
+    "equity": 98046.89,
+    "cash": -72.99,
+    "buying_power": 274443.69,
+    "status": "ACTIVE",
+    "trading_blocked": false,
+    "mode": "PAPER"
+  },
+  "skipped_count": 19,
+  "skipped_reasons": [
+    {
+      "reason": "no room left: $31 of the 100% exposure cap is unspent",
+      "count": 16
+    },
+    {
+      "reason": "risking $148.47",
+      "count": 1
+    },
+    {
+      "reason": "risking $78.39",
+      "count": 1
+    },
+    {
+      "reason": "risking $111.35",
+      "count": 1
+    }
+  ]
+}

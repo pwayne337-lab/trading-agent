@@ -43,6 +43,14 @@ def blank_state() -> dict:
         "protected": [],
         "skipped": [],
         "findings": [],
+        # Trades this run declined to take on its own and handed to you
+        # instead, and the moment they stop being valid. Empty is a real
+        # answer: it means the run held nothing back.
+        "pending": [],
+        "pending_expires_at": None,
+        # Anything config/overrides.json changed, clamped or refused, so a
+        # setting you edited that did not take effect says so on the page.
+        "config_notes": [],
         "briefing": "",
         "recent_trades": [],
         "errors": [],

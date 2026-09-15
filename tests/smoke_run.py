@@ -1455,6 +1455,124 @@ check("a finding from a run that really read the account stays undated",
       "a live alarm should not be dated as carried")
 
 
+
+# ---------------------------------------------------------------------------
+print("\nM. Approved trades are submitted; everything else is refused")
+# ---------------------------------------------------------------------------
+#
+# submit-approved is the only path in the system that turns a human click into
+# a live order, so it gets the same end-to-end treatment as the daily run. The
+# checks that matter most are the refusals: this job must never invent a trade,
+# never take one twice, and never act on a batch that has gone stale.
+
+from tbot import pending as pendingmod
+
+
+def _proposal(symbol, shares=10, entry=100.0, stop=90.0, target=120.0,
+              strategy="pullback"):
+    return {"id": f"2026-09-16-{symbol}-{strategy}", "kind": "trade",
+            "symbol": symbol, "strategy": strategy, "shares": shares,
+            "entry": entry, "stop": stop, "target": target,
+            "dollars_at_risk": (entry - stop) * shares,
+            "notional": entry * shares, "why": "test",
+            "held_because": ["research flagged [test]"],
+            "research": {"veto": False, "flags": ["test"], "source": "llm"}}
+
+
+def run_submit(proposals, decisions, positions=(), orders=(),
+               expires_at="2099-01-01T14:30:00+00:00", submit=True,
+               broker=None, market_open=False):
+    bars = build_bars()
+    if broker is None:
+        broker = FakeBroker(list(positions), list(orders), dry_run=not submit)
+    broker.clock = lambda: {"is_open": market_open}
+    agent_mod.AlpacaBroker = lambda **kw: broker
+    datamod.load_universe = (
+        lambda syms, start=None, end=None, refresh=False: bars)
+
+    tmp = Path(tempfile.mkdtemp())
+    state_mod.STATE_DIR = tmp
+    state_mod.STATE_FILE = tmp / "agent_state.json"
+    state_mod.EQUITY_FILE = tmp / "equity_history.csv"
+    state_mod.RUNLOG_FILE = tmp / "run_log.jsonl"
+    dash_mod.SITE = tmp
+    agent_mod.write_dashboard = lambda title="Trading agent": (
+        (tmp / "index.html").write_text("<!doctype html><p>x") or (tmp / "index.html"))
+
+    pendingmod.save_pending(list(proposals), "2026-09-16", expires_at)
+    pendingmod.decisions_file().write_text(json.dumps({"decisions": decisions}))
+
+    args = argparse.Namespace(symbols=None, start="2016-01-01", equity=None,
+                              risk=None, refresh=False, submit=submit,
+                              i_understand_the_risk=False, ignore_session=False)
+    agent_mod.cmd_submit_approved(args)
+    return broker, state_mod.load_state()
+
+
+b, st = run_submit([_proposal("UP"), _proposal("TWIN"), _proposal("FLAT")],
+                   {"2026-09-16-UP-pullback": {"verdict": "approve"},
+                    "2026-09-16-TWIN-pullback": {"verdict": "reject"}})
+sent = [o["symbol"] for o in b.submitted]
+check("an approved proposal is submitted", sent == ["UP"], str(sent))
+check("a rejected proposal is not submitted", "TWIN" not in sent, str(sent))
+check("an unanswered proposal is not submitted", "FLAT" not in sent, str(sent))
+check("the submitted order keeps the approved stop and target",
+      b.submitted[0]["stop"] == 90.0 and b.submitted[0]["target"] == 120.0,
+      str(b.submitted))
+check("the order is traced back to the proposal it came from",
+      st["orders"][0].get("from_proposal") == "2026-09-16-UP-pullback",
+      str(st["orders"]))
+_left = [p["symbol"] for p in pendingmod.load_pending()["proposals"]]
+check("an answered proposal is consumed so a later pass cannot resubmit it",
+      "UP" not in _left and "TWIN" not in _left, str(_left))
+check("but one you have not answered yet survives for the next pass",
+      _left == ["FLAT"], str(_left))
+
+# --- the refusals ---------------------------------------------------------
+
+b, st = run_submit([_proposal("UP")],
+                   {"2026-09-16-UP-pullback": {"verdict": "approve"}},
+                   expires_at="2020-01-01T14:30:00+00:00")
+check("an expired batch submits nothing however it was approved",
+      b.submitted == [], str(b.submitted))
+
+b, st = run_submit([_proposal("UP")],
+                   {"2026-09-16-UP-pullback": {"verdict": "approve"}},
+                   positions=[{"symbol": "UP", "shares": 5, "avg_entry": 100.0,
+                               "market_value": 500.0, "unrealized_pl": 0.0}])
+check("a symbol already held is not bought again", b.submitted == [],
+      str(b.submitted))
+
+b, st = run_submit([_proposal("UP")],
+                   {"2026-09-16-UP-pullback": {"verdict": "approve"}},
+                   orders=[{"symbol": "UP", "id": "o1", "side": "buy",
+                            "qty": "10", "status": "new"}])
+check("a symbol with an order already working is not doubled",
+      b.submitted == [], str(b.submitted))
+
+b, st = run_submit([_proposal("UP")],
+                   {"2026-09-16-UP-pullback": {"verdict": "approve"}},
+                   market_open=True)
+check("nothing is submitted once the session is already running",
+      b.submitted == [], str(b.submitted))
+
+bad = _proposal("UP"); bad["stop"] = 150.0        # stop above the entry
+b, st = run_submit([bad], {"2026-09-16-UP-pullback": {"verdict": "approve"}})
+check("a proposal that is not a sane long trade is refused",
+      b.submitted == [], str(b.submitted))
+
+bad2 = _proposal("UP"); bad2["shares"] = 0
+b, st = run_submit([bad2], {"2026-09-16-UP-pullback": {"verdict": "approve"}})
+check("a zero-share proposal is refused", b.submitted == [], str(b.submitted))
+
+b, st = run_submit([_proposal("UP")],
+                   {"2026-09-16-UP-pullback": {"verdict": "approve"}},
+                   submit=False)
+check("a dry run sends nothing to the broker", b.submitted == [], str(b.submitted))
+
+b, st = run_submit([], {})
+check("an empty batch is a no-op rather than an error", b.submitted == [])
+
 print("\n" + "=" * 60)
 if FAILURES:
     print(f"{len(FAILURES)} SMOKE CHECK(S) FAILED:")

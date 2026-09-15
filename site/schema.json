@@ -1,0 +1,218 @@
+{
+  "schema": {
+    "fields": [
+      {
+        "key": "risk.risk_per_trade",
+        "type": "float",
+        "min": 0.001,
+        "max": 0.02,
+        "step": 0.0005,
+        "label": "Risk per trade",
+        "unit": "fraction of equity",
+        "help": "A full stop-out costs this share of the account. 0.01 is 1%. Above 2% a normal losing streak becomes an account-ending one."
+      },
+      {
+        "key": "risk.max_open_positions",
+        "type": "int",
+        "min": 1,
+        "max": 30,
+        "label": "Max open positions",
+        "help": "Ceiling on concurrent trades. The correlation and risk caps are what actually bound risk; this bounds attention."
+      },
+      {
+        "key": "risk.max_position_pct",
+        "type": "float",
+        "min": 0.05,
+        "max": 0.5,
+        "step": 0.01,
+        "label": "Max position size",
+        "unit": "fraction of equity",
+        "help": "No single position may exceed this share of equity, however tight its stop."
+      },
+      {
+        "key": "risk.max_correlation",
+        "type": "float",
+        "min": 0.5,
+        "max": 0.99,
+        "step": 0.01,
+        "label": "Max correlation",
+        "help": "Refuse a new trade moving this closely with something already held. Stops three tickers becoming one bet at triple size."
+      },
+      {
+        "key": "risk.max_gross_exposure",
+        "type": "float",
+        "min": 0.1,
+        "max": 1.0,
+        "step": 0.05,
+        "label": "Max gross exposure",
+        "unit": "fraction of equity",
+        "help": "Total cost basis of open positions. Capped at 1.00: this agent never uses margin."
+      },
+      {
+        "key": "risk.max_drawdown_halt",
+        "type": "float",
+        "min": 0.05,
+        "max": 0.5,
+        "step": 0.01,
+        "label": "Drawdown halt",
+        "help": "Stop opening new trades once the account is this far below its high water mark."
+      },
+      {
+        "key": "risk.min_risk_fraction",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "step": 0.05,
+        "label": "Smallest worthwhile trade",
+        "help": "As a fraction of a normal risk unit. Below this the leftover room is better left unspent than turned into a one-share position that still costs a slot."
+      },
+      {
+        "key": "strategy.enabled",
+        "type": "multi",
+        "options": [
+          "pullback",
+          "breakout",
+          "reversion"
+        ],
+        "min_selected": 1,
+        "label": "Rule sets",
+        "help": "Which strategies may fire. They look for different things, so running all three raises trade count without doubling a bet."
+      },
+      {
+        "key": "strategy.rank_by",
+        "type": "enum",
+        "options": [
+          "none",
+          "momentum",
+          "reward_risk",
+          "liquidity"
+        ],
+        "label": "Rank candidates by",
+        "help": "Which setups win when more qualify than there are free slots. Most setups get discarded for want of a slot, so this matters more than most entry rules."
+      },
+      {
+        "key": "strategy.reward_risk",
+        "type": "float",
+        "min": 1.0,
+        "max": 5.0,
+        "step": 0.25,
+        "label": "Reward:risk target",
+        "help": "Target distance as a multiple of stop distance."
+      },
+      {
+        "key": "strategy.max_hold_days",
+        "type": "int",
+        "min": 5,
+        "max": 120,
+        "label": "Max hold (days)",
+        "help": "Close a trade that has gone nowhere for this long."
+      },
+      {
+        "key": "strategy.min_avg_dollar_volume",
+        "type": "float",
+        "min": 1000000.0,
+        "max": 1000000000.0,
+        "step": 1000000.0,
+        "label": "Liquidity floor",
+        "unit": "avg daily dollar volume",
+        "help": "Thin names have wide spreads and gap hard."
+      },
+      {
+        "key": "gate.enabled",
+        "type": "bool",
+        "label": "Hold uncertain trades for approval",
+        "help": "Off means the agent behaves exactly as it did before: clean trades submitted, vetoed trades discarded, nothing waits."
+      },
+      {
+        "key": "gate.hold_vetoed",
+        "type": "bool",
+        "label": "Let me overrule a veto",
+        "help": "A vetoed trade becomes a proposal instead of vanishing. It still does not happen unless you approve it."
+      },
+      {
+        "key": "gate.hold_flagged",
+        "type": "bool",
+        "label": "Hold flagged trades",
+        "help": "Trades the research layer noted something about but did not block. This is the setting that can cost you a trade you would otherwise have taken."
+      },
+      {
+        "key": "gate.hold_research_outage",
+        "type": "bool",
+        "label": "Hold when research could not run"
+      },
+      {
+        "key": "gate.hold_above_risk_fraction",
+        "type": "float",
+        "min": 0.0,
+        "max": 5.0,
+        "step": 0.25,
+        "label": "Hold trades risking more than",
+        "unit": "x a normal risk unit",
+        "help": "0 turns this off."
+      },
+      {
+        "key": "research.check_earnings",
+        "type": "bool",
+        "label": "Block trades near earnings",
+        "help": "An earnings report is a scheduled overnight coin flip that can gap straight through a stop."
+      },
+      {
+        "key": "research.earnings_blackout_days",
+        "type": "int",
+        "min": 0,
+        "max": 30,
+        "label": "Earnings blackout (days)"
+      },
+      {
+        "key": "research.use_llm",
+        "type": "bool",
+        "label": "AI headline review",
+        "help": "The model can only ever block a trade. There is no path that lets it create or enlarge a position."
+      },
+      {
+        "key": "research.require_research",
+        "type": "bool",
+        "label": "Skip the trade if research fails",
+        "help": "On means a research outage costs you trades. Off means the agent trades without knowing whether earnings are two days out. On is the safe side."
+      }
+    ],
+    "forbidden": {
+      "allow_live_trading": "the paper/live switch is not a dashboard control"
+    },
+    "watchlist": {
+      "type": "symbols",
+      "label": "Watchlist",
+      "help": "Add or remove tickers. Everything else stays on the list in config.py."
+    }
+  },
+  "current": {
+    "risk.risk_per_trade": 0.01,
+    "risk.max_open_positions": 15,
+    "risk.max_position_pct": 0.25,
+    "risk.max_correlation": 0.8,
+    "risk.max_gross_exposure": 1.0,
+    "risk.max_drawdown_halt": 0.2,
+    "risk.min_risk_fraction": 0.25,
+    "strategy.enabled": [
+      "pullback",
+      "breakout",
+      "reversion"
+    ],
+    "strategy.rank_by": "none",
+    "strategy.reward_risk": 2.0,
+    "strategy.max_hold_days": 40,
+    "strategy.min_avg_dollar_volume": 20000000.0,
+    "gate.enabled": true,
+    "gate.hold_vetoed": true,
+    "gate.hold_flagged": true,
+    "gate.hold_research_outage": true,
+    "gate.hold_above_risk_fraction": 0.0,
+    "research.check_earnings": true,
+    "research.earnings_blackout_days": 10,
+    "research.use_llm": true,
+    "research.require_research": true
+  },
+  "overrides": {},
+  "notes": [],
+  "watchlist_size": 193
+}

@@ -296,11 +296,52 @@ class ResearchConfig:
 
 
 @dataclass
+class GateConfig:
+    """Which trades wait for a person instead of going straight to the broker.
+
+    The agent is autonomous by default and stays that way. A setup that passes
+    sizing, correlation and the research screen cleanly is submitted exactly as
+    it always was. This only governs the trades the agent was already unsure
+    about -- the ones it used to throw away with a line in the log.
+
+    Waiting costs nothing in execution. Entries are market orders with time in
+    force GTC, sent after the close, filling at the next session's open. An
+    approval given overnight is submitted before that same open and fills on
+    the same terms.
+    """
+
+    enabled: bool = True
+
+    # A research veto used to end the trade silently. Held instead, it becomes
+    # a proposal you can overrule. This is strictly safer than the old
+    # behaviour: the trade still does not happen unless you say so.
+    hold_vetoed: bool = True
+
+    # The model returns flags alongside a verdict, and can flag without
+    # vetoing. Those are the trades the agent would have taken while noting
+    # something odd about them. This is the one setting that can cost you a
+    # trade you would previously have got, so an unanswered proposal expires
+    # untaken rather than being submitted late.
+    hold_flagged: bool = True
+
+    # The research layer failing is not the same as the research layer passing
+    # the trade. With require_research on, screen() already turns an outage
+    # into a veto; this keeps the distinction visible on the dashboard.
+    hold_research_outage: bool = True
+
+    # Hold any trade risking more than this multiple of a normal risk unit.
+    # 0 turns it off. The risk module already caps position size, so this is
+    # about noticing an unusual trade, not about preventing a dangerous one.
+    hold_above_risk_fraction: float = 0.0
+
+
+@dataclass
 class AgentConfig:
     strategy: StrategyConfig = field(default_factory=StrategyConfig)
     risk: RiskConfig = field(default_factory=RiskConfig)
     costs: CostConfig = field(default_factory=CostConfig)
     research: ResearchConfig = field(default_factory=ResearchConfig)
+    gate: GateConfig = field(default_factory=GateConfig)
     watchlist: List[str] = field(default_factory=lambda: list(DEFAULT_WATCHLIST))
 
     # Safety switch. The agent will not send a live order unless this is

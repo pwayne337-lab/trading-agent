@@ -1202,5 +1202,91 @@ def write_dashboard(title: str = "Trading agent") -> Path:
         "equity": (st.get("account") or {}).get("equity"),
         "positions": len(st.get("positions") or []),
         "orders": len(st.get("orders") or []),
+        # So the hub can show a badge without fetching the larger file below.
+        "pending": len(st.get("pending") or []),
     }, indent=2))
+
+    _write_hub_files(st)
     return path
+
+
+# ---------------------------------------------------------------------------
+# What the hub reads
+# ---------------------------------------------------------------------------
+#
+# GitHub Pages is static, so the hub cannot query the agent -- it can only read
+# files the agent published. These two are that interface.
+#
+# The payload is an explicit list of fields rather than the state dict dumped
+# whole. A future run adding an internal field to state would otherwise publish
+# it to a public URL the moment it was written, which is a bad default for a
+# file that holds account figures.
+
+HUB_FIELDS = (
+    "updated_at", "last_full_run", "mode", "healthy", "carried_from",
+    "carried_reason", "positions", "signals", "orders", "exits", "protected",
+    "vetoes", "findings", "errors", "briefing", "recent_trades", "research",
+    "strategy_by_symbol", "pending", "pending_expires_at", "config_notes",
+    "approved_submitted", "approved_refused",
+)
+
+
+# Fields the hub treats as lists. A state file written before these existed
+# has no key for them, and `null` where a list belongs makes every reader on
+# the other side write the same defensive check.
+HUB_LISTS = frozenset((
+    "positions", "signals", "orders", "exits", "protected", "vetoes",
+    "findings", "errors", "recent_trades", "pending", "config_notes",
+    "approved_submitted", "approved_refused",
+))
+
+
+def _write_hub_files(st: dict) -> None:
+    payload = {}
+    for k in HUB_FIELDS:
+        v = st.get(k)
+        payload[k] = ([] if v is None else v) if k in HUB_LISTS else v
+
+    acct = st.get("account") or {}
+    payload["account"] = {k: acct.get(k) for k in
+                          ("equity", "cash", "buying_power", "status",
+                           "trading_blocked", "mode")}
+
+    # 35 lines of "skipped, not in an uptrend" is noise on a roster. The hub
+    # shows the count and the reasons, not every symbol.
+    skipped = st.get("skipped") or []
+    reasons = {}
+    for item in skipped:
+        r = (item.get("reason") or "").split(",")[0][:60]
+        reasons[r] = reasons.get(r, 0) + 1
+    payload["skipped_count"] = len(skipped)
+    payload["skipped_reasons"] = sorted(
+        ({"reason": r, "count": c} for r, c in reasons.items()),
+        key=lambda x: -x["count"])
+
+    (SITE / "agent.json").write_text(json.dumps(payload, indent=2, default=str))
+
+    # The settings form is generated from this, so the hub cannot offer a field
+    # the agent would refuse. Current values travel with it, so the form opens
+    # showing what is actually in force rather than the defaults.
+    try:
+        from . import overrides
+        from .config import AgentConfig
+
+        cfg, notes = overrides.apply(AgentConfig())
+        current = {}
+        for key in overrides.EDITABLE:
+            section, field = key.split(".", 1)
+            current[key] = getattr(getattr(cfg, section), field)
+
+        (SITE / "schema.json").write_text(json.dumps({
+            "schema": overrides.schema(),
+            "current": current,
+            "overrides": overrides.load_raw(),
+            "notes": notes,
+            "watchlist_size": len(cfg.watchlist),
+        }, indent=2, default=str))
+    except Exception as exc:
+        # A broken schema file must never stop the dashboard being published.
+        (SITE / "schema.json").write_text(
+            json.dumps({"error": f"could not build the schema: {exc}"}, indent=2))

@@ -6,5 +6,6 @@
   "mode": "paper",
   "equity": 98046.89,
   "positions": 9,
-  "orders": 2
+  "orders": 2,
+  "pending": 0
 }

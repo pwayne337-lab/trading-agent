@@ -1763,6 +1763,119 @@ check("a config without the setting still sizes normally", _o.shares == 99,
       f"{_o.shares} shares")
 
 
+# ---------------------------------------------------------------------------
+print("\nThe approval gate holds uncertain trades without changing the rest")
+# ---------------------------------------------------------------------------
+#
+# The property that matters most here is the negative one: a trade the agent
+# was never unsure about must not become a trade that waits for a human. A
+# gate that quietly held everything would turn an autonomous agent into a
+# manual one on the first day nobody was watching.
+
+from dataclasses import replace as _replace
+
+from tbot import pending as _pending
+from tbot.research import Verdict as _Verdict
+
+_gcfg = AgentConfig()
+_gcfg.risk.starting_equity = 100_000.0
+_GEQ = 100_000.0
+
+_gorder = size_position(_GEQ, 100.0, 90.0, _gcfg.risk, _gcfg.strategy,
+                        open_positions=0, gross_exposure=0.0)
+
+
+def _held(verdict, cfg=None, order=None):
+    return _pending.flag_reasons(verdict, order or _gorder, _GEQ, cfg or _gcfg)
+
+
+_clean = _Verdict(False, "nothing of concern", [], "llm", 6)
+check("a clean trade is not held, so the agent stays autonomous",
+      _held(_clean) == [], f"{_held(_clean)}")
+
+_vetoed = _Verdict(True, "merger vote on the 18th", ["merger"], "llm", 6)
+check("a vetoed trade is held instead of discarded", len(_held(_vetoed)) == 1)
+check("and the reason names the veto",
+      "vetoed" in _held(_vetoed)[0], _held(_vetoed)[0])
+
+_flagged = _Verdict(False, "CFO left last week", ["management"], "llm", 4)
+check("a flagged trade that was not vetoed is held", len(_held(_flagged)) == 1)
+check("and the reason carries the flag tag",
+      "management" in _held(_flagged)[0], _held(_flagged)[0])
+
+_outage = _Verdict(True, "blocked: research unavailable", ["no-research"],
+                   "unavailable", 0)
+_r = _held(_outage)
+check("a research outage is reported as never screened, not as a judgement",
+      any("never actually screened" in x for x in _r), f"{_r}")
+
+# --- the switches behave as documented ------------------------------------
+_off = _replace(_gcfg, gate=_replace(_gcfg.gate, enabled=False))
+check("gate off holds nothing at all",
+      _held(_vetoed, _off) == [] and _held(_flagged, _off) == [])
+
+_nov = _replace(_gcfg, gate=_replace(_gcfg.gate, hold_vetoed=False))
+check("hold_vetoed off discards a veto exactly as before",
+      _held(_vetoed, _nov) == [])
+
+_nof = _replace(_gcfg, gate=_replace(_gcfg.gate, hold_flagged=False))
+check("hold_flagged off takes a flagged trade as before",
+      _held(_flagged, _nof) == [])
+check("but hold_flagged off still holds an outright veto",
+      len(_held(_vetoed, _nof)) == 1)
+
+_big = _replace(_gcfg, gate=_replace(_gcfg.gate, hold_above_risk_fraction=1.5))
+check("a normal-sized clean trade is not held by the size rule",
+      _held(_clean, _big) == [], f"{_held(_clean, _big)}")
+
+
+class _FatOrder:
+    shares, entry, stop, target = 500, 100.0, 90.0, 120.0
+    dollars_at_risk, notional = 5_000.0, 50_000.0
+
+
+_fat = _held(_clean, _big, _FatOrder())
+check("a trade risking 5x a normal unit is held for a look", len(_fat) == 1)
+check("and the reason states both figures",
+      "5,000" in _fat[0] and "1,000" in _fat[0], f"{_fat}")
+
+# --- resolving decisions --------------------------------------------------
+
+
+class _Sig:
+    strategy, notes = "pullback", "reclaimed the 20 EMA"
+
+
+_prop = _pending.build_proposal("2026-09-16", "AMZN", _Sig(), _gorder,
+                                _flagged, ["research flagged"])
+check("a proposal id is stable across a repeated run",
+      _prop["id"] == _pending.proposal_id("2026-09-16", "AMZN", "pullback"))
+check("a proposal carries the numbers needed to submit it",
+      all(_prop[k] for k in ("shares", "entry", "stop", "target")))
+check("a proposal records why it was held", _prop["held_because"] == ["research flagged"])
+
+_batch = {"session": "2026-09-16", "expires_at": "2099-01-01T14:30:00+00:00",
+          "proposals": [dict(_prop, id="a"), dict(_prop, id="b"), dict(_prop, id="c")]}
+_res = _pending.resolve(_batch, {"a": {"verdict": "approve"},
+                                 "b": {"verdict": "reject"}})
+check("an approved proposal is the only kind that becomes an order",
+      [p["id"] for p in _res["approved"]] == ["a"])
+check("a rejected proposal is not approved",
+      [p["id"] for p in _res["rejected"]] == ["b"])
+check("an unanswered proposal is undecided, not approved",
+      [p["id"] for p in _res["undecided"]] == ["c"])
+
+_stale = dict(_batch, expires_at="2020-01-01T14:30:00+00:00")
+_res2 = _pending.resolve(_stale, {"a": {"verdict": "approve"}})
+check("an expired batch approves nothing, however it was answered",
+      _res2["approved"] == [] and len(_res2["expired"]) == 3)
+check("and the batch says it expired", _res2["batch_expired"] is True)
+
+_res3 = _pending.resolve(_batch, {"a": {"verdict": "banana"}})
+check("an unrecognised verdict is treated as unanswered, never as approval",
+      _res3["approved"] == [] and len(_res3["undecided"]) == 3)
+
+
 print("\n" + "=" * 60)
 if FAILURES:
     print(f"{len(FAILURES)} CHECK(S) FAILED:")
