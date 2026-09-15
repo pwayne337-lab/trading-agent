@@ -934,6 +934,74 @@ check("a clean run with only a note shows no error banner",
 
 # ---------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
+# One verdict at the top, so checking on the agent takes a glance. The page
+# could already say everything was wrong; it could not say that nothing was,
+# and "no news" has to be stated rather than inferred from an absence of red.
+from tbot import dashboard as _vd
+import re as _re
+
+_v_acct = {"equity": 99006.78, "cash": 320.54, "buying_power": 0.0,
+           "status": "ACTIVE", "trading_blocked": False, "mode": "PAPER"}
+_v_now = pd.Timestamp.utcnow().isoformat()
+
+
+def _verdict(**over):
+    st = {"mode": "paper", "updated_at": _v_now, "last_full_run": _v_now,
+          "account": _v_acct, "errors": [], "findings": [], "recent_trades": [],
+          "positions": [{"symbol": "AAPL", "shares": 56, "avg_entry": 327.42,
+                         "market_value": 18613.48, "unrealized_pl": 277.74,
+                         "stop": 310.0, "stop_shares": 56,
+                         "stop_checked": True}]}
+    st.update(over)
+    page = _vd.build_html(state=st, history=[])
+    m = _re.search(r'<div class="verdict ([a-z]+)">.*?<div>(.*?)</div>', page, _re.S)
+    return (m.group(1), " ".join(_re.sub("<[^>]+>", " ", m.group(2)).split()))
+
+
+_tone, _text = _verdict()
+check("a clean agent says so in one line", _tone == "ok", f"{_tone}: {_text}")
+check("and does not make you infer it from silence",
+      "nothing needs you" in _text.lower(), _text)
+
+_tone, _text = _verdict(errors=["could not place a stop on NVDA: 403"])
+check("an error makes the verdict critical", _tone == "critical", f"{_tone}: {_text}")
+check("and points at the report", "send it to Claude" in _text, _text)
+
+_naked = [{"symbol": "AAPL", "shares": 56, "avg_entry": 327.42,
+           "market_value": 18613.48, "unrealized_pl": 277.74,
+           "stop": None, "stop_checked": True}]
+_tone, _text = _verdict(positions=_naked)
+check("a position with no stop is critical", _tone == "critical", f"{_tone}: {_text}")
+
+# The one that would have cried wolf on day one. A position carrying no stop
+# because the field did not exist yet is not a position without a stop.
+_unchecked = [dict(_naked[0])]
+_unchecked[0].pop("stop_checked")
+_tone, _text = _verdict(positions=_unchecked)
+check("but an unchecked position is not called unprotected",
+      _tone == "ok", f"{_tone}: {_text}")
+
+_tone, _text = _verdict(last_full_run=(pd.Timestamp.utcnow()
+                                       - pd.Timedelta(days=4)).isoformat())
+check("an agent that stopped trading is critical, matching its banner",
+      _tone == "critical", f"{_tone}: {_text}")
+
+# The report has to carry what is actually needed to diagnose it remotely.
+_page = _vd.build_html(
+    state={"mode": "paper", "updated_at": _v_now, "last_full_run": _v_now,
+           "account": _v_acct, "positions": _naked, "recent_trades": [],
+           "errors": ["could not place a stop on NVDA: 403"],
+           "findings": [{"severity": "critical", "agent": "reconcile",
+                         "message": "UNPROTECTED: no stop behind AAPL"}],
+           "strategy_by_symbol": {"AAPL": "pullback"}},
+    history=[])
+for _needle in ["AGENT DIAGNOSTIC REPORT", "last full run", "NVDA",
+                "UNPROTECTED", "AAPL", "21:30", "pullback"]:
+    check(f"the report carries {_needle!r}", _needle in _page,
+          "missing from the copyable report")
+
+
+# ---------------------------------------------------------------------------
 # A save must never ERASE the last-traded marker. _cmd_run builds its state
 # from blank_state() and carries almost nothing forward, so every path in it
 # that saves without full_run wrote a null over a real timestamp -- and the

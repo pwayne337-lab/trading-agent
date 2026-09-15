@@ -633,6 +633,13 @@ def _attach_protection(positions, orders_open):
         p["stop"] = rec.get("stop")
         p["target"] = rec.get("target")
         p["stop_shares"] = rec.get("stop_shares", 0)
+        # Says the order book was actually read, which is not the same as the
+        # stop being absent. Every state written before this field existed has
+        # no stop recorded against any position, and without this marker the
+        # page would announce that every holding was unprotected the moment
+        # this shipped -- crying wolf on the one alarm that must never be
+        # ignored. Unknown is not none, here as everywhere else.
+        p["stop_checked"] = True
     return positions
 
 

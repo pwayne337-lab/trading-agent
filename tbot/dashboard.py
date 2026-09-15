@@ -343,10 +343,16 @@ def build_html(state: dict = None, history: list = None,
                 if cov and shares and cov < shares:
                     stop_cell += (f" <span class='warn-inline'>covers {cov} of "
                                   f"{int(shares)}</span>")
-            else:
+            elif p.get("stop_checked"):
                 # Not cosmetic. No working stop is the one thing on this page
                 # that needs acting on today, so it is said in words.
                 stop_cell = "<span class='warn-inline'>none</span>"
+                dist_cell = risk_cell = r_cell = "&mdash;"
+            else:
+                # The order book was never read for this position, so nothing
+                # is known either way. Saying "none" here would be an alarm
+                # invented out of a missing field.
+                stop_cell = "<span class='muted-inline'>not checked</span>"
                 dist_cell = risk_cell = r_cell = "&mdash;"
 
             tag = f' <span class="tag">{strat}</span>' if strat else ""
@@ -505,6 +511,113 @@ def build_html(state: dict = None, history: list = None,
         rules_block = (f'<div class="card empty">Could not read the settings '
                        f'({_esc(type(exc).__name__)}).</div>')
 
+    # -- one verdict, above everything ---------------------------------------
+    # The page could already tell you everything was wrong; it could not tell
+    # you that nothing was. Checking on an agent should take one glance, and
+    # "no news" has to be stated rather than inferred from the absence of red.
+    crit = [f for f in findings if f.get("severity") == "critical"]
+    warn = [f for f in findings if f.get("severity") == "warning"]
+    _lf_str, _lf_hrs, _ = _age(state.get("last_full_run"))
+    troubles = []
+    if errors:
+        troubles.append(f"{len(errors)} error{'s' if len(errors) > 1 else ''} "
+                        f"on the last run")
+    if crit:
+        troubles.append(f"{len(crit)} critical check{'s' if len(crit) > 1 else ''}")
+    if state.get("last_full_run") and _lf_hrs >= 30:
+        troubles.append(f"no trading run since {_lf_str}")
+    if not state.get("last_full_run"):
+        troubles.append("no trading run on record")
+    # Only positions whose order book was actually read. A position with no
+    # stop recorded because the page predates the field is not a position
+    # without a stop, and this alarm is far too important to fire on a guess.
+    naked = [p for p in positions
+             if p.get("stop_checked") and not p.get("stop")]
+    if naked:
+        troubles.append(f"{len(naked)} position{'s' if len(naked) > 1 else ''} "
+                        f"with no stop")
+
+    if troubles:
+        # An agent that has not traded in three days is as serious as an error,
+        # and the banner below already calls it critical. Two parts of one page
+        # disagreeing about how bad something is teaches you to trust neither.
+        _dead = (not state.get("last_full_run")) or _lf_hrs >= 72
+        verdict_tone = "critical" if (errors or crit or naked or _dead) else "warning"
+        verdict_head = "Needs you"
+        verdict_text = "; ".join(troubles) + "."
+        verdict_sub = ("Open the report below and send it to Claude."
+                       if verdict_tone == "critical" else
+                       "Worth a look when you get a chance.")
+    elif warn:
+        verdict_tone = "warning"
+        verdict_head = "Running, with a note"
+        verdict_text = f"{len(warn)} thing{'s' if len(warn) > 1 else ''} worth a look."
+        verdict_sub = "Nothing is broken."
+    else:
+        verdict_tone = "ok"
+        verdict_head = "All good"
+        verdict_text = "The agent is running and nothing needs you."
+        verdict_sub = (f"Last traded {_lf_str}."
+                       if state.get("last_full_run") else "")
+
+    verdict_block = (f'<div class="verdict {verdict_tone}">'
+                     f'<span class="dot"></span>'
+                     f'<div><strong>{_esc(verdict_head)}</strong> '
+                     f'{_esc(verdict_text)}'
+                     + (f'<span class="vsub">{_esc(verdict_sub)}</span>'
+                        if verdict_sub else "")
+                     + '</div></div>')
+
+    # -- a report worth pasting ----------------------------------------------
+    # The loop this is built for: something goes wrong, the page says so, and
+    # the whole picture gets handed to Claude in one paste. Assembled here
+    # rather than left to be described from memory, because the details that
+    # matter are the ones nobody thinks to mention.
+    lines = ["AGENT DIAGNOSTIC REPORT",
+             f"page built     : {state.get('updated_at') or 'never'}",
+             f"figures from   : {carried_from or state.get('updated_at') or 'never'}",
+             f"last full run  : {state.get('last_full_run') or 'NONE ON RECORD'}",
+             f"mode           : {mode}",
+             f"healthy flag   : {state.get('healthy')}",
+             f"this write was : " + ("an hourly refresh" if state.get("refresh_only")
+                                     else "a mid-session check" if state.get("monitor_only")
+                                     else "a trading run"),
+             f"equity         : {acct.get('equity')}",
+             f"cash           : {acct.get('cash')}",
+             f"positions      : {len(positions)}"]
+    if carried_from:
+        lines.append(f"carried because: {state.get('carried_reason')}")
+    lines.append("")
+    lines.append(f"ERRORS ({len(errors)}):")
+    lines += [f"  - {e}" for e in errors] or ["  none"]
+    lines.append("")
+    lines.append(f"CHECKS ({len(findings)}):")
+    lines += [f"  [{f.get('severity')}] {f.get('agent')}: {f.get('message')}"
+              for f in findings] or ["  none"]
+    lines.append("")
+    lines.append("POSITIONS:")
+    if positions:
+        for p in positions:
+            stop = p.get("stop")
+            lines.append(
+                f"  {p.get('symbol')}: {p.get('shares')} sh @ "
+                f"{p.get('avg_entry')}, stop "
+                f"{stop if stop else 'NONE'}, "
+                f"P/L {p.get('unrealized_pl')}, "
+                f"opened by {(state.get('strategy_by_symbol') or {}).get(p.get('symbol'), '?')}")
+    else:
+        lines.append("  none")
+    lines.append("")
+    lines.append("SCHEDULE (UTC, weekdays):")
+    lines += ["  14-21 hourly  refresh the page (no trading)",
+              "  15:00         mid-session check + protect",
+              "  16:00         protect again",
+              "  21:30         the trading run"]
+    lines.append("")
+    lines.append("Paste this to Claude with what you saw on the page.")
+    report_text = "\n".join(lines)
+    report_esc = _esc(report_text)
+
     stamp = (f"Generated {state['updated_at']} UTC from the agent's own run records"
              if state.get("updated_at") else "This page has not been generated from a real run yet")
     if carried_from:
@@ -605,6 +718,26 @@ def build_html(state: dict = None, history: list = None,
   .ev.block .tag{{color:var(--critical);border-color:var(--critical)}}
   .ev.sold .tag{{color:var(--warning);border-color:var(--warning)}}
   .ev.fixed .tag{{color:var(--good);border-color:var(--good)}}
+  .verdict{{display:flex;gap:10px;align-items:flex-start;margin:0 0 14px;
+    padding:12px 14px;border-radius:9px;font-size:14px;line-height:1.5;
+    border:1px solid var(--border);background:var(--surface-1)}}
+  .verdict .dot{{width:9px;height:9px;border-radius:50%;margin-top:6px;
+    flex:0 0 9px}}
+  .verdict.ok .dot{{background:var(--good)}}
+  .verdict.warning .dot{{background:var(--warning)}}
+  .verdict.critical .dot{{background:var(--critical)}}
+  .verdict.ok{{border-left:3px solid var(--good)}}
+  .verdict.warning{{border-left:3px solid var(--warning)}}
+  .verdict.critical{{border-left:3px solid var(--critical)}}
+  .vsub{{display:block;color:var(--muted);font-size:12.5px;margin-top:2px}}
+  .copybtn{{appearance:none;border:1px solid var(--border);background:var(--plane);
+    color:var(--text-primary);font:inherit;font-size:13px;padding:8px 14px;
+    border-radius:7px;cursor:pointer}}
+  .copybtn:hover{{border-color:var(--series-1);color:var(--series-1)}}
+  .copied{{margin-left:9px;color:var(--good);font-size:12.5px}}
+  pre{{white-space:pre-wrap;word-break:break-word;font-size:11.5px;
+    line-height:1.5;background:var(--plane);border:1px solid var(--gridline);
+    border-radius:7px;padding:10px;margin:8px 0 0;overflow-x:auto}}
   .tabs{{display:flex;gap:4px;flex-wrap:wrap;margin:4px 0 18px;
     border-bottom:1px solid var(--gridline)}}
   .tab{{appearance:none;background:none;border:none;border-bottom:2px solid transparent;
@@ -620,6 +753,7 @@ def build_html(state: dict = None, history: list = None,
     max-width:70ch}}
   .why{{color:var(--text-secondary);font-size:12.5px;line-height:1.5}}
   .warn-inline{{color:var(--warning);font-size:11.5px}}
+  .muted-inline{{color:var(--muted);font-size:11.5px}}
   .brief p{{margin:0 0 10px}} .brief p:last-child{{margin:0}}
   footer{{margin-top:30px;color:var(--muted);font-size:11.5px;line-height:1.6}}
 </style>
@@ -632,6 +766,10 @@ def build_html(state: dict = None, history: list = None,
   </header>
 
   <nav class="sitenav"><a href="./floor.html">How a run works &rarr;</a></nav>
+
+  <!-- One glance answers "is anything wrong". Sits above everything, because
+       the answer has to be readable without scrolling or interpreting. -->
+  {verdict_block}
 
   <!-- Banners sit OUTSIDE the tabs on purpose. An unprotected position or a
        dead agent is not something to go looking for under a heading. -->
@@ -658,6 +796,20 @@ def build_html(state: dict = None, history: list = None,
 
     <h2>Briefing</h2>
     {brief_block}
+
+    <h2>Something wrong?</h2>
+    <div class="card">
+      <p class="note" style="margin-top:0">Copy this and send it to Claude. It
+      carries the timestamps, errors, checks and positions that are needed to
+      work out what happened &mdash; including the details nobody thinks to
+      mention.</p>
+      <button class="copybtn" id="copyreport">Copy report for Claude</button>
+      <span class="copied" id="copied" hidden>Copied</span>
+      <details style="margin-top:10px">
+        <summary class="note" style="cursor:pointer">See what gets copied</summary>
+        <pre id="reporttext">{report_esc}</pre>
+      </details>
+    </div>
   </section>
 
   <section class="panel" data-panel="positions" hidden>
@@ -760,6 +912,54 @@ def build_html(state: dict = None, history: list = None,
   // Coming back to a home-screen app does not reload it, so check again.
   document.addEventListener("visibilitychange", function () {{
     if (!document.hidden) {{ paint(); checkForNewer(); }}
+  }});
+}})();
+
+/* ---------------------------------------------------------------------------
+   The report, copied in one click. The loop this serves: something breaks,
+   the page says so, and the whole picture reaches Claude in one paste rather
+   than being described from memory.
+--------------------------------------------------------------------------- */
+(function () {{
+  var btn = document.getElementById('copyreport');
+  var pre = document.getElementById('reporttext');
+  var ok = document.getElementById('copied');
+  if (!btn || !pre) return;
+
+  function flash(msg) {{
+    if (!ok) return;
+    ok.textContent = msg;
+    ok.hidden = false;
+    setTimeout(function () {{ ok.hidden = true; }}, 4000);
+  }}
+
+  // The clipboard API needs a secure context and a permission that some
+  // browsers refuse. Selecting the text is not as good as copying it, but it
+  // is one keystroke away rather than a dead button.
+  function select() {{
+    var d = pre.closest('details');
+    if (d) d.open = true;
+    try {{
+      var r = document.createRange();
+      r.selectNodeContents(pre);
+      var sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(r);
+      flash('Selected \u2014 press Cmd/Ctrl+C');
+    }} catch (e) {{
+      flash('Open the details below and copy it');
+    }}
+  }}
+
+  btn.addEventListener('click', function () {{
+    var text = pre.textContent;
+    if (navigator.clipboard && navigator.clipboard.writeText) {{
+      navigator.clipboard.writeText(text).then(
+        function () {{ flash('Copied'); }},
+        select);
+    }} else {{
+      select();
+    }}
   }});
 }})();
 
