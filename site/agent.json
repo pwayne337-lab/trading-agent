@@ -1,6 +1,6 @@
 {
-  "updated_at": "2026-09-16T19:28:00+00:00",
-  "last_full_run": "2026-09-15T23:35:39+00:00",
+  "updated_at": "2026-09-16T23:43:53+00:00",
+  "last_full_run": "2026-09-16T23:43:53+00:00",
   "mode": "paper",
   "healthy": true,
   "carried_from": null,
@@ -10,8 +10,8 @@
       "symbol": "AAPL",
       "shares": 56,
       "avg_entry": 327.423929,
-      "market_value": 18544.96,
-      "unrealized_pl": 209.219976,
+      "market_value": 18652.48,
+      "unrealized_pl": 316.739976,
       "stop": 309.11,
       "target": 361.49,
       "stop_shares": 56,
@@ -21,8 +21,8 @@
       "symbol": "ABNB",
       "shares": 71,
       "avg_entry": 167.804789,
-      "market_value": 11883.27,
-      "unrealized_pl": -30.870019,
+      "market_value": 11883.98,
+      "unrealized_pl": -30.160019,
       "stop": 158.13,
       "target": 197.25,
       "stop_shares": 71,
@@ -32,8 +32,8 @@
       "symbol": "ABT",
       "shares": 142,
       "avg_entry": 104.877324,
-      "market_value": 14536.54,
-      "unrealized_pl": -356.040008,
+      "market_value": 14535.12,
+      "unrealized_pl": -357.460008,
       "stop": 98.79,
       "target": 119.14,
       "stop_shares": 142,
@@ -43,8 +43,8 @@
       "symbol": "AMAT",
       "shares": 17,
       "avg_entry": 426.28,
-      "market_value": 7010.205,
-      "unrealized_pl": -236.555,
+      "market_value": 7143.74,
+      "unrealized_pl": -103.02,
       "stop": 367.96,
       "target": 536.7,
       "stop_shares": 17,
@@ -54,8 +54,8 @@
       "symbol": "AMGN",
       "shares": 33,
       "avg_entry": 383.8,
-      "market_value": 12388.9227,
-      "unrealized_pl": -276.4773,
+      "market_value": 12379.1778,
+      "unrealized_pl": -286.2222,
       "stop": 353.44,
       "target": 440.53,
       "stop_shares": 33,
@@ -65,8 +65,8 @@
       "symbol": "AMZN",
       "shares": 1,
       "avg_entry": 250.27,
-      "market_value": 244.53,
-      "unrealized_pl": -5.74,
+      "market_value": 247.65,
+      "unrealized_pl": -2.62,
       "stop": 239.74,
       "target": 284.75,
       "stop_shares": 1,
@@ -76,8 +76,8 @@
       "symbol": "APD",
       "shares": 39,
       "avg_entry": 295.0,
-      "market_value": 11101.35,
-      "unrealized_pl": -403.65,
+      "market_value": 11196.12,
+      "unrealized_pl": -308.88,
       "stop": 278.46,
       "target": 324.02,
       "stop_shares": 39,
@@ -87,8 +87,8 @@
       "symbol": "CL",
       "shares": 224,
       "avg_entry": 88.24,
-      "market_value": 19447.68,
-      "unrealized_pl": -318.08,
+      "market_value": 19492.48,
+      "unrealized_pl": -273.28,
       "stop": 84.64,
       "target": 97.66,
       "stop_shares": 224,
@@ -98,61 +98,32 @@
       "symbol": "FCX",
       "shares": 38,
       "avg_entry": 70.153948,
-      "market_value": 2582.1,
-      "unrealized_pl": -83.750024,
+      "market_value": 2639.1,
+      "unrealized_pl": -26.750024,
       "stop": 61.52,
       "target": 85.1,
       "stop_shares": 38,
       "stop_checked": true
     }
   ],
-  "signals": [
-    {
-      "symbol": "FCX",
-      "entry": 69.38,
-      "stop": 61.5178,
-      "target": 85.1044,
-      "shares": 38,
-      "strategy": "reversion",
-      "why": "RSI(2) at 10, below the 10-day average; stop 2.50x ATR below entry"
-    }
-  ],
-  "orders": [
-    {
-      "symbol": "FCX",
-      "shares": 38,
-      "stop": 61.5178,
-      "target": 85.1044,
-      "dollars_at_risk": 298.76,
-      "order_id": "a19b08cd-bdb1-43e1-9963-40bda89efb82",
-      "strategy": "reversion"
-    }
-  ],
-  "exits": [
-    {
-      "symbol": "DDOG",
-      "reason": "trend break: closed at $230.27, below the 50-day average of $245.43",
-      "status": "accepted",
-      "unrealized_pl": 26.88
-    }
-  ],
+  "signals": [],
+  "orders": [],
+  "exits": [],
   "protected": [],
   "vetoes": [],
-  "findings": [
-    {
-      "severity": "info",
-      "agent": "reconcile",
-      "message": "new since last run: FCX"
-    },
-    {
-      "severity": "info",
-      "agent": "reconcile",
-      "message": "closed since last run: DDOG"
-    }
-  ],
+  "findings": [],
   "errors": [],
   "briefing": "Research is off. Add ANTHROPIC_API_KEY to your .env file to get a written briefing here.",
   "recent_trades": [
+    {
+      "symbol": "DDOG",
+      "closed": "2026-09-16",
+      "shares": 12,
+      "avg_cost": 227.86,
+      "exit": 230.0,
+      "pnl": 25.68,
+      "reason": "sold"
+    },
     {
       "symbol": "ADP",
       "closed": "2026-09-15",
@@ -234,54 +205,26 @@
     "FCX": "reversion"
   },
   "pending": [],
-  "pending_expires_at": "2026-09-16T09:30:00-04:00",
+  "pending_expires_at": "2026-09-17T09:30:00-04:00",
   "config_notes": [],
   "approved_submitted": [],
   "approved_refused": [],
   "account": {
-    "equity": 97760.72,
+    "equity": 98191.01,
     "cash": 21.16,
-    "buying_power": 273755.4,
+    "buying_power": 274960.21,
     "status": "ACTIVE",
     "trading_blocked": false,
     "mode": "PAPER"
   },
-  "skipped_count": 20,
+  "skipped_count": 23,
   "skipped_reasons": [
     {
-      "reason": "no room left: $52 of the 100% exposure cap is unspent",
-      "count": 12
+      "reason": "no room left: $21 of the 100% exposure cap is unspent",
+      "count": 22
     },
     {
-      "reason": "risking $98.26",
-      "count": 1
-    },
-    {
-      "reason": "risking $144.11",
-      "count": 1
-    },
-    {
-      "reason": "risking $123.77",
-      "count": 1
-    },
-    {
-      "reason": "risking $106.25",
-      "count": 1
-    },
-    {
-      "reason": "risking $115.79",
-      "count": 1
-    },
-    {
-      "reason": "risking $130.22",
-      "count": 1
-    },
-    {
-      "reason": "risking $126.36",
-      "count": 1
-    },
-    {
-      "reason": "risking $1.37",
+      "reason": "risking $1.07",
       "count": 1
     }
   ]
