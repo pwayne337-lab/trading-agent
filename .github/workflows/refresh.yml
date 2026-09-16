@@ -20,12 +20,13 @@
 name: Refresh the page
 
 on:
-  # Hourly through the session. Cron does not follow daylight saving, so the
+  # Every ten minutes through the session (six Pages deploys an hour, under
+  # the ten-per-hour limit even when the scheduler bunches them). Cron does not follow daylight saving, so the
   # window is set wide enough to cover the US market in both halves of the
   # year: 14:00-21:00 UTC is 10am-5pm ET in summer and 9am-4pm ET in winter.
   # A refresh outside market hours costs nothing and reports the same truth.
   schedule:
-    - cron: "0 14-21 * * 1-5"
+    - cron: "*/10 14-21 * * 1-5"
   workflow_dispatch:
 
 permissions:
