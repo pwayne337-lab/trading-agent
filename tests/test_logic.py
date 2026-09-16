@@ -934,6 +934,106 @@ check("a clean run with only a note shows no error banner",
 
 # ---------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
+print("\nOverride bounds: what a settings write cannot talk the agent into")
+# ---------------------------------------------------------------------------
+# The overrides module lets settings be changed from outside the repo. Its own
+# docstring calls the bounds "the point of the module" -- they are what stands
+# between a bad write and an emptied account -- and nothing was checking them.
+# A browser-side form protects nothing: the file can be edited directly and
+# anything holding a write token can post whatever it likes, so the limits only
+# count if they hold on the side that places the orders.
+from tbot import overrides as _ov
+from tbot.config import AgentConfig as _AC
+
+
+def _applied(raw):
+    return _ov.apply(_AC(), raw)
+
+
+_cfg, _notes = _applied({"risk": {"risk_per_trade": 0.9}})
+check("risk per trade cannot be set to 90% of the account",
+      _cfg.risk.risk_per_trade <= 0.02, str(_cfg.risk.risk_per_trade))
+check("and the clamp is recorded, not silent",
+      any("risk_per_trade" in n for n in _notes), str(_notes))
+
+_cfg, _ = _applied({"risk": {"risk_per_trade": 0.0}})
+check("nor to zero, which would size every trade to nothing",
+      _cfg.risk.risk_per_trade >= 0.001, str(_cfg.risk.risk_per_trade))
+
+# The no-margin promise. 1.00 means fully invested; anything above it is
+# borrowed money, which this agent says on its own dashboard it never uses.
+_cfg, _ = _applied({"risk": {"max_gross_exposure": 5.0}})
+check("gross exposure cannot be pushed past 100%, so it cannot borrow",
+      _cfg.risk.max_gross_exposure <= 1.0, str(_cfg.risk.max_gross_exposure))
+
+_cfg, _ = _applied({"risk": {"max_position_pct": 0.99}})
+check("no single position can be made to swallow the account",
+      _cfg.risk.max_position_pct <= 0.50, str(_cfg.risk.max_position_pct))
+
+_cfg, _ = _applied({"risk": {"max_drawdown_halt": 0.95}})
+check("the drawdown breaker cannot be set so wide it never trips",
+      _cfg.risk.max_drawdown_halt <= 0.50, str(_cfg.risk.max_drawdown_halt))
+
+# The one that matters most: the switch between fake money and real money.
+# What actually protects it is the ALLOWLIST -- apply() only touches keys named
+# in EDITABLE -- not the FORBIDDEN list, which exists to explain the refusal.
+# Emptying FORBIDDEN changes no behaviour, so a check resting on it would pass
+# against code that had lost the real guard. Both are asserted separately.
+_cfg, _notes = _applied({"allow_live_trading": True})
+check("the paper/live switch cannot be flipped by a settings write",
+      getattr(_cfg, "allow_live_trading", False) is False,
+      str(getattr(_cfg, "allow_live_trading", None)))
+check("the live switch is not even offered as an editable field",
+      "allow_live_trading" not in _ov.EDITABLE,
+      "the allowlist now contains the paper/live switch")
+
+# The allowlist is the boundary, so prove it holds for things nobody listed.
+for _danger in ("allow_live_trading", "i_understand_the_risk",
+                "risk.max_gross_exposure_override", "broker_url"):
+    _before = _AC()
+    _after, _ = _applied({_danger: True, "risk": {_danger: True}})
+    check(f"a settings write cannot invent the field {_danger!r}",
+          (_after.risk.risk_per_trade, _after.risk.max_gross_exposure,
+           getattr(_after, "allow_live_trading", False))
+          == (_before.risk.risk_per_trade, _before.risk.max_gross_exposure,
+              False),
+          f"{_danger} changed something it should not reach")
+
+# Junk must not crash the run or sneak through.
+_cfg, _notes = _applied({"risk": {"risk_per_trade": "lots"}})
+check("a non-numeric setting is not accepted",
+      isinstance(_cfg.risk.risk_per_trade, float)
+      and 0.001 <= _cfg.risk.risk_per_trade <= 0.02,
+      str(_cfg.risk.risk_per_trade))
+
+_base = _AC()
+_cfg, _ = _applied({"risk": {"there_is_no_such_setting": 1}})
+check("an unknown key changes nothing",
+      _cfg.risk.risk_per_trade == _base.risk.risk_per_trade)
+
+_cfg, _ = _applied({})
+check("an empty overrides file leaves every default alone",
+      (_cfg.risk.risk_per_trade, _cfg.risk.max_open_positions,
+       _cfg.risk.max_gross_exposure)
+      == (_base.risk.risk_per_trade, _base.risk.max_open_positions,
+          _base.risk.max_gross_exposure))
+
+_cfg, _notes = _applied({"_unreadable": True})
+check("an unparseable overrides file falls back to the defaults",
+      _cfg.risk.risk_per_trade == _base.risk.risk_per_trade and bool(_notes),
+      str(_notes))
+
+# The form the hub renders comes from this same table, so a field it can offer
+# is by construction a field the agent will accept.
+_schema = _ov.schema()
+check("the settings schema is built from the same bounds the agent enforces",
+      isinstance(_schema, dict) and len(str(_schema)) > 50)
+check("and it never advertises the live-trading switch",
+      "allow_live_trading" not in str(_schema.get("fields", _schema)),
+      "the schema offers a field the agent must never accept")
+
+
+# ---------------------------------------------------------------------------
 # One verdict at the top, so checking on the agent takes a glance. The page
 # could already say everything was wrong; it could not say that nothing was,
 # and "no news" has to be stated rather than inferred from an absence of red.
