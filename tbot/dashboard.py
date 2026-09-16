@@ -1029,9 +1029,38 @@ def build_html(state: dict = None, history: list = None,
   }}
 
   checkForNewer();
+
+  // Poll while the page is open. Without this an open tab only noticed a new
+  // run when it was reloaded or switched away from and back -- so a dashboard
+  // left up on a desk showed the same numbers all afternoon while the agent
+  // refreshed behind it every few minutes. This is what makes the page feel
+  // live; the schedule only decides how often there is something new to find.
+  //
+  // Paused while the tab is hidden. A backgrounded phone waking to fetch every
+  // half minute is a battery drain nobody asked for, and the visibility
+  // handler below catches up the moment it is looked at again.
+  var POLL_MS = 30000;
+  var timer = null;
+  function startPolling() {{
+    if (timer) return;
+    timer = setInterval(checkForNewer, POLL_MS);
+  }}
+  function stopPolling() {{
+    if (!timer) return;
+    clearInterval(timer);
+    timer = null;
+  }}
+  startPolling();
+
   // Coming back to a home-screen app does not reload it, so check again.
   document.addEventListener("visibilitychange", function () {{
-    if (!document.hidden) {{ paint(); checkForNewer(); }}
+    if (document.hidden) {{
+      stopPolling();
+    }} else {{
+      paint();
+      checkForNewer();
+      startPolling();
+    }}
   }});
 }})();
 

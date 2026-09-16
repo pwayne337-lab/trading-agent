@@ -26,7 +26,7 @@ on:
   # year: 14:00-21:00 UTC is 10am-5pm ET in summer and 9am-4pm ET in winter.
   # A refresh outside market hours costs nothing and reports the same truth.
   schedule:
-    - cron: "*/10 14-21 * * 1-5"
+    - cron: "*/5 13-21 * * 1-5"
   workflow_dispatch:
 
 permissions:
