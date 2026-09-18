@@ -236,11 +236,11 @@
 
   <!-- One glance answers "is anything wrong". Sits above everything, because
        the answer has to be readable without scrolling or interpreting. -->
-  <div class="verdict ok"><span class="dot"></span><div><strong>All good</strong> The agent is running and nothing needs you.<span class="vsub">Last traded 0 min ago.</span></div></div>
+  <div class="verdict ok"><span class="dot"></span><div><strong>All good</strong> The agent is running and nothing needs you.<span class="vsub">Last traded 19 hours ago.</span></div></div>
 
   <!-- Banners sit OUTSIDE the tabs on purpose. An unprotected position or a
        dead agent is not something to go looking for under a heading. -->
-  <div id="banners"></div>
+  <div id="banners"><div class="banner info"><strong>Mid-session check.</strong> Positions, orders and the safety checks below were refreshed just now. Any signals and orders shown are from the last after-close run; this check does not trade.</div></div>
 
   <div class="tabs" role="tablist">
     <button class="tab" role="tab" data-panel="overview" aria-selected="true">
@@ -262,7 +262,7 @@
   </div>
 
   <section class="panel" data-panel="overview">
-    <div class="tiles"><div class="tile "><div class="tl">Account equity</div><div class="tv">$98,551.35</div><div class="ts">paper account &middot; 10 run(s) recorded</div></div><div class="tile good"><div class="tl">Today</div><div class="tv">+0.37%</div><div class="ts">since the previous run</div></div><div class="tile bad"><div class="tl">Since start</div><div class="tv">-1.45%</div><div class="ts">of tracking</div></div><div class="tile bad"><div class="tl">Open positions</div><div class="tv">9</div><div class="ts">open P&amp;L $-711.31</div></div><div class="tile "><div class="tl">Cash</div><div class="tv">$21.16</div><div class="ts">uninvested</div></div><div class="tile good" id="age-tile"><div class="tl">Last run</div><div class="tv" id="age-val">0 min ago</div><div class="ts">0 order(s), 0 blocked</div></div></div>
+    <div class="tiles"><div class="tile "><div class="tl">Account equity</div><div class="tv">$99,017.04</div><div class="ts">paper account &middot; 10 run(s) recorded</div></div><div class="tile good"><div class="tl">Today</div><div class="tv">+0.37%</div><div class="ts">since the previous run</div></div><div class="tile bad"><div class="tl">Since start</div><div class="tv">-0.98%</div><div class="ts">of tracking</div></div><div class="tile bad"><div class="tl">Open positions</div><div class="tv">9</div><div class="ts">open P&amp;L $-246.19</div></div><div class="tile "><div class="tl">Cash</div><div class="tv">$21.16</div><div class="ts">uninvested</div></div><div class="tile good" id="age-tile"><div class="tl">Last run</div><div class="tv" id="age-val">0 min ago</div><div class="ts">0 order(s), 0 blocked</div></div></div>
 
     <h2>Account equity</h2>
     <div class="card" id="c1"><svg viewBox="0 0 920 280" class="chart" role="img" preserveAspectRatio="none">
@@ -278,7 +278,7 @@
 </svg><div class="tip" id="t1"></div></div>
 
     <h2>Open positions</h2>
-    <div class="card scroll positions-summary"><table><thead><tr><th>Symbol</th><th class="n">Shares</th><th class="n">Avg cost</th><th class="n">Value</th><th class="n">Open P&amp;L</th></tr></thead><tbody><tr><td><strong>AAPL</strong></td><td class='n'>56</td><td class='n'>$327.42</td><td class='n'>$18,835.60</td><td class='n pos'>$+499.86</td></tr><tr><td><strong>ABNB</strong></td><td class='n'>71</td><td class='n'>$167.80</td><td class='n'>$11,857.00</td><td class='n neg'>$-57.14</td></tr><tr><td><strong>ABT</strong></td><td class='n'>142</td><td class='n'>$104.88</td><td class='n'>$14,516.66</td><td class='n neg'>$-375.92</td></tr><tr><td><strong>AMAT</strong></td><td class='n'>17</td><td class='n'>$426.28</td><td class='n'>$7,074.04</td><td class='n neg'>$-172.72</td></tr><tr><td><strong>AMGN</strong></td><td class='n'>33</td><td class='n'>$383.80</td><td class='n'>$12,493.80</td><td class='n neg'>$-171.60</td></tr><tr><td><strong>AMZN</strong></td><td class='n'>1</td><td class='n'>$250.27</td><td class='n'>$250.59</td><td class='n pos'>$+0.32</td></tr><tr><td><strong>APD</strong></td><td class='n'>39</td><td class='n'>$295.00</td><td class='n'>$11,158.68</td><td class='n neg'>$-346.32</td></tr><tr><td><strong>CL</strong></td><td class='n'>224</td><td class='n'>$88.24</td><td class='n'>$19,651.52</td><td class='n neg'>$-114.24</td></tr><tr><td><strong>FCX</strong></td><td class='n'>38</td><td class='n'>$70.15</td><td class='n'>$2,692.30</td><td class='n pos'>$+26.45</td></tr></tbody></table></div>
+    <div class="card scroll positions-summary"><table><thead><tr><th>Symbol</th><th class="n">Shares</th><th class="n">Avg cost</th><th class="n">Value</th><th class="n">Open P&amp;L</th></tr></thead><tbody><tr><td><strong>AAPL</strong></td><td class='n'>56</td><td class='n'>$327.42</td><td class='n'>$18,800.32</td><td class='n pos'>$+464.58</td></tr><tr><td><strong>ABNB</strong></td><td class='n'>71</td><td class='n'>$167.80</td><td class='n'>$11,857.00</td><td class='n neg'>$-57.14</td></tr><tr><td><strong>ABT</strong></td><td class='n'>142</td><td class='n'>$104.88</td><td class='n'>$14,543.64</td><td class='n neg'>$-348.94</td></tr><tr><td><strong>AMAT</strong></td><td class='n'>17</td><td class='n'>$426.28</td><td class='n'>$7,401.89</td><td class='n pos'>$+155.12</td></tr><tr><td><strong>AMGN</strong></td><td class='n'>33</td><td class='n'>$383.80</td><td class='n'>$12,738.50</td><td class='n pos'>$+73.09</td></tr><tr><td><strong>AMZN</strong></td><td class='n'>1</td><td class='n'>$250.27</td><td class='n'>$254.37</td><td class='n pos'>$+4.09</td></tr><tr><td><strong>APD</strong></td><td class='n'>39</td><td class='n'>$295.00</td><td class='n'>$11,083.80</td><td class='n neg'>$-421.20</td></tr><tr><td><strong>CL</strong></td><td class='n'>224</td><td class='n'>$88.24</td><td class='n'>$19,613.44</td><td class='n neg'>$-152.32</td></tr><tr><td><strong>FCX</strong></td><td class='n'>38</td><td class='n'>$70.15</td><td class='n'>$2,702.37</td><td class='n pos'>$+36.52</td></tr></tbody></table></div>
 
     <h2>What the agent did on its last run</h2>
     <div class="card"><ul class="events"><li class="ev skip"><span class="tag">skipped</span> <strong>BMY</strong> no room left: $21 of the 100% exposure cap is unspent, which will not buy one share at $62.84</li><li class="ev skip"><span class="tag">skipped</span> <strong>C</strong> no room left: $21 of the 100% exposure cap is unspent, which will not buy one share at $132.95</li><li class="ev skip"><span class="tag">skipped</span> <strong>CSX</strong> no room left: $21 of the 100% exposure cap is unspent, which will not buy one share at $47.90</li><li class="ev skip"><span class="tag">skipped</span> <strong>EEM</strong> no room left: $21 of the 100% exposure cap is unspent, which will not buy one share at $66.91</li><li class="ev skip"><span class="tag">skipped</span> <strong>GILD</strong> no room left: $21 of the 100% exposure cap is unspent, which will not buy one share at $150.89</li><li class="ev skip"><span class="tag">skipped</span> <strong>GM</strong> no room left: $21 of the 100% exposure cap is unspent, which will not buy one share at $86.62</li><li class="ev skip"><span class="tag">skipped</span> <strong>IBB</strong> no room left: $21 of the 100% exposure cap is unspent, which will not buy one share at $207.07</li><li class="ev skip"><span class="tag">skipped</span> <strong>JNJ</strong> no room left: $21 of the 100% exposure cap is unspent, which will not buy one share at $270.22</li><li class="ev skip"><span class="tag">skipped</span> <strong>KO</strong> no room left: $21 of the 100% exposure cap is unspent, which will not buy one share at $88.06</li><li class="ev skip"><span class="tag">skipped</span> <strong>KRE</strong> no room left: $21 of the 100% exposure cap is unspent, which will not buy one share at $72.74</li><li class="ev skip"><span class="tag">skipped</span> <strong>LRCX</strong> no room left: $21 of the 100% exposure cap is unspent, which will not buy one share at $269.31</li><li class="ev skip"><span class="tag">skipped</span> <strong>MS</strong> no room left: $21 of the 100% exposure cap is unspent, which will not buy one share at $202.42</li><li class="ev skip"><span class="tag">skipped</span> <strong>MSFT</strong> no room left: $21 of the 100% exposure cap is unspent, which will not buy one share at $497.75</li><li class="ev skip"><span class="tag">skipped</span> <strong>MU</strong> no room left: $21 of the 100% exposure cap is unspent, which will not buy one share at $977.50</li><li class="ev skip"><span class="tag">skipped</span> <strong>NEM</strong> no room left: $21 of the 100% exposure cap is unspent, which will not buy one share at $124.39</li><li class="ev skip"><span class="tag">skipped</span> <strong>NVDA</strong> no room left: $21 of the 100% exposure cap is unspent, which will not buy one share at $219.34</li><li class="ev skip"><span class="tag">skipped</span> <strong>PSX</strong> no room left: $21 of the 100% exposure cap is unspent, which will not buy one share at $274.21</li><li class="ev skip"><span class="tag">skipped</span> <strong>QQQ</strong> no room left: $21 of the 100% exposure cap is unspent, which will not buy one share at $716.92</li><li class="ev skip"><span class="tag">skipped</span> <strong>SCHW</strong> no room left: $21 of the 100% exposure cap is unspent, which will not buy one share at $104.63</li><li class="ev skip"><span class="tag">skipped</span> <strong>SMCI</strong> no room left: $21 of the 100% exposure cap is unspent, which will not buy one share at $40.35</li><li class="ev skip"><span class="tag">skipped</span> <strong>SMH</strong> no room left: $21 of the 100% exposure cap is unspent, which will not buy one share at $560.61</li><li class="ev skip"><span class="tag">skipped</span> <strong>VZ</strong> no room left: $21 of the 100% exposure cap is unspent, which will not buy one share at $48.33</li><li class="ev skip"><span class="tag">skipped</span> <strong>WDAY</strong> no room left: $21 of the 100% exposure cap is unspent, which will not buy one share at $199.28</li><li class="ev skip"><span class="tag">skipped</span> <strong>XLF</strong> no room left: $21 of the 100% exposure cap is unspent, which will not buy one share at $55.88</li><li class="ev skip"><span class="tag">skipped</span> <strong>XLK</strong> no room left: $21 of the 100% exposure cap is unspent, which will not buy one share at $188.06</li><li class="ev skip"><span class="tag">skipped</span> <strong>XLV</strong> no room left: $21 of the 100% exposure cap is unspent, which will not buy one share at $168.81</li></ul></div>
@@ -297,13 +297,13 @@
       <details style="margin-top:10px">
         <summary class="note" style="cursor:pointer">See what gets copied</summary>
         <pre id="reporttext">AGENT DIAGNOSTIC REPORT
-page built     : 2026-09-17T23:36:54+00:00
-figures from   : 2026-09-17T23:36:54+00:00
+page built     : 2026-09-18T18:57:12+00:00
+figures from   : 2026-09-18T18:57:12+00:00
 last full run  : 2026-09-17T23:36:54+00:00
 mode           : PAPER
 healthy flag   : True
-this write was : a trading run
-equity         : 98551.35
+this write was : a mid-session check
+equity         : 99017.04
 cash           : 21.16
 positions      : 9
 
@@ -314,15 +314,15 @@ CHECKS (0):
   none
 
 POSITIONS:
-  AAPL: 56 sh @ 327.423929, stop 309.11, P/L 499.859976, opened by pullback
+  AAPL: 56 sh @ 327.423929, stop 309.11, P/L 464.579976, opened by pullback
   ABNB: 71 sh @ 167.804789, stop 158.13, P/L -57.140019, opened by reversion
-  ABT: 142 sh @ 104.877324, stop 98.79, P/L -375.920008, opened by reversion
-  AMAT: 17 sh @ 426.28, stop 367.96, P/L -172.72, opened by reversion
-  AMGN: 33 sh @ 383.8, stop 353.44, P/L -171.6, opened by reversion
-  AMZN: 1 sh @ 250.27, stop 239.74, P/L 0.3223, opened by reversion
-  APD: 39 sh @ 295.0, stop 278.46, P/L -346.32, opened by reversion
-  CL: 224 sh @ 88.24, stop 84.64, P/L -114.24, opened by reversion
-  FCX: 38 sh @ 70.153947, stop 61.52, P/L 26.450014, opened by reversion
+  ABT: 142 sh @ 104.877324, stop 98.79, P/L -348.940008, opened by reversion
+  AMAT: 17 sh @ 426.28, stop 367.96, P/L 155.125, opened by reversion
+  AMGN: 33 sh @ 383.8, stop 353.44, P/L 73.095, opened by reversion
+  AMZN: 1 sh @ 250.27, stop 239.74, P/L 4.095, opened by reversion
+  APD: 39 sh @ 295.0, stop 278.46, P/L -421.2, opened by reversion
+  CL: 224 sh @ 88.24, stop 84.64, P/L -152.32, opened by reversion
+  FCX: 38 sh @ 70.153947, stop 61.52, P/L 36.520014, opened by reversion
 
 SCHEDULE (UTC, weekdays):
   14-21 hourly  refresh the page (no trading)
@@ -337,7 +337,7 @@ Paste this to Claude with what you saw on the page.</pre>
 
   <section class="panel" data-panel="positions" hidden>
     <h2>What you are holding</h2>
-    <div class="card scroll positions-detail"><table><thead><tr><th>Symbol</th><th class="n sec">Shares</th><th class="n sec">Entry</th><th class="n sec">Last</th><th class="n">Stop</th><th class="n">To stop</th><th class="n sec">At risk</th><th class="n sec">R</th><th class="n">Open P&amp;L</th></tr></thead><tbody><tr><td><strong>AAPL</strong> <span class="tag">pullback</span></td><td class='n sec'>56</td><td class='n sec'>$327.42</td><td class='n sec'>$336.35</td><td class='n'>$309.11</td><td class='n'>8.1%</td><td class='n sec'>$1,525</td><td class='n sec'>+0.49R</td><td class='n pos'>$+499.86</td></tr><tr><td><strong>ABNB</strong> <span class="tag">reversion</span></td><td class='n sec'>71</td><td class='n sec'>$167.80</td><td class='n sec'>$167.00</td><td class='n'>$158.13</td><td class='n'>5.3%</td><td class='n sec'>$630</td><td class='n sec'>-0.08R</td><td class='n neg'>$-57.14</td></tr><tr><td><strong>ABT</strong> <span class="tag">reversion</span></td><td class='n sec'>142</td><td class='n sec'>$104.88</td><td class='n sec'>$102.23</td><td class='n'>$98.79</td><td class='n'>3.4%</td><td class='n sec'>$488</td><td class='n sec'>-0.43R</td><td class='n neg'>$-375.92</td></tr><tr><td><strong>AMAT</strong> <span class="tag">reversion</span></td><td class='n sec'>17</td><td class='n sec'>$426.28</td><td class='n sec'>$416.12</td><td class='n'>$367.96</td><td class='n'>11.6%</td><td class='n sec'>$819</td><td class='n sec'>-0.17R</td><td class='n neg'>$-172.72</td></tr><tr><td><strong>AMGN</strong> <span class="tag">reversion</span></td><td class='n sec'>33</td><td class='n sec'>$383.80</td><td class='n sec'>$378.60</td><td class='n'>$353.44</td><td class='n'>6.6%</td><td class='n sec'>$830</td><td class='n sec'>-0.17R</td><td class='n neg'>$-171.60</td></tr><tr><td><strong>AMZN</strong> <span class="tag">reversion</span></td><td class='n sec'>1</td><td class='n sec'>$250.27</td><td class='n sec'>$250.59</td><td class='n'>$239.74</td><td class='n'>4.3%</td><td class='n sec'>$11</td><td class='n sec'>+0.03R</td><td class='n pos'>$+0.32</td></tr><tr><td><strong>APD</strong> <span class="tag">reversion</span></td><td class='n sec'>39</td><td class='n sec'>$295.00</td><td class='n sec'>$286.12</td><td class='n'>$278.46</td><td class='n'>2.7%</td><td class='n sec'>$299</td><td class='n sec'>-0.54R</td><td class='n neg'>$-346.32</td></tr><tr><td><strong>CL</strong> <span class="tag">reversion</span></td><td class='n sec'>224</td><td class='n sec'>$88.24</td><td class='n sec'>$87.73</td><td class='n'>$84.64</td><td class='n'>3.5%</td><td class='n sec'>$692</td><td class='n sec'>-0.14R</td><td class='n neg'>$-114.24</td></tr><tr><td><strong>FCX</strong> <span class="tag">reversion</span></td><td class='n sec'>38</td><td class='n sec'>$70.15</td><td class='n sec'>$70.85</td><td class='n'>$61.52</td><td class='n'>13.2%</td><td class='n sec'>$355</td><td class='n sec'>+0.08R</td><td class='n pos'>$+26.45</td></tr></tbody></table></div><p class="note">"At risk" is what this position loses from here if its stop is hit. "R" is the profit measured in units of the risk originally taken, so +1R means it has made back exactly what it was prepared to lose.</p>
+    <div class="card scroll positions-detail"><table><thead><tr><th>Symbol</th><th class="n sec">Shares</th><th class="n sec">Entry</th><th class="n sec">Last</th><th class="n">Stop</th><th class="n">To stop</th><th class="n sec">At risk</th><th class="n sec">R</th><th class="n">Open P&amp;L</th></tr></thead><tbody><tr><td><strong>AAPL</strong> <span class="tag">pullback</span></td><td class='n sec'>56</td><td class='n sec'>$327.42</td><td class='n sec'>$335.72</td><td class='n'>$309.11</td><td class='n'>7.9%</td><td class='n sec'>$1,490</td><td class='n sec'>+0.45R</td><td class='n pos'>$+464.58</td></tr><tr><td><strong>ABNB</strong> <span class="tag">reversion</span></td><td class='n sec'>71</td><td class='n sec'>$167.80</td><td class='n sec'>$167.00</td><td class='n'>$158.13</td><td class='n'>5.3%</td><td class='n sec'>$630</td><td class='n sec'>-0.08R</td><td class='n neg'>$-57.14</td></tr><tr><td><strong>ABT</strong> <span class="tag">reversion</span></td><td class='n sec'>142</td><td class='n sec'>$104.88</td><td class='n sec'>$102.42</td><td class='n'>$98.79</td><td class='n'>3.5%</td><td class='n sec'>$515</td><td class='n sec'>-0.40R</td><td class='n neg'>$-348.94</td></tr><tr><td><strong>AMAT</strong> <span class="tag">reversion</span></td><td class='n sec'>17</td><td class='n sec'>$426.28</td><td class='n sec'>$435.41</td><td class='n'>$367.96</td><td class='n'>15.5%</td><td class='n sec'>$1,147</td><td class='n sec'>+0.16R</td><td class='n pos'>$+155.12</td></tr><tr><td><strong>AMGN</strong> <span class="tag">reversion</span></td><td class='n sec'>33</td><td class='n sec'>$383.80</td><td class='n sec'>$386.02</td><td class='n'>$353.44</td><td class='n'>8.4%</td><td class='n sec'>$1,075</td><td class='n sec'>+0.07R</td><td class='n pos'>$+73.09</td></tr><tr><td><strong>AMZN</strong> <span class="tag">reversion</span></td><td class='n sec'>1</td><td class='n sec'>$250.27</td><td class='n sec'>$254.37</td><td class='n'>$239.74</td><td class='n'>5.7%</td><td class='n sec'>$15</td><td class='n sec'>+0.39R</td><td class='n pos'>$+4.09</td></tr><tr><td><strong>APD</strong> <span class="tag">reversion</span></td><td class='n sec'>39</td><td class='n sec'>$295.00</td><td class='n sec'>$284.20</td><td class='n'>$278.46</td><td class='n'>2.0%</td><td class='n sec'>$224</td><td class='n sec'>-0.65R</td><td class='n neg'>$-421.20</td></tr><tr><td><strong>CL</strong> <span class="tag">reversion</span></td><td class='n sec'>224</td><td class='n sec'>$88.24</td><td class='n sec'>$87.56</td><td class='n'>$84.64</td><td class='n'>3.3%</td><td class='n sec'>$654</td><td class='n sec'>-0.19R</td><td class='n neg'>$-152.32</td></tr><tr><td><strong>FCX</strong> <span class="tag">reversion</span></td><td class='n sec'>38</td><td class='n sec'>$70.15</td><td class='n sec'>$71.11</td><td class='n'>$61.52</td><td class='n'>13.5%</td><td class='n sec'>$365</td><td class='n sec'>+0.11R</td><td class='n pos'>$+36.52</td></tr></tbody></table></div><p class="note">"At risk" is what this position loses from here if its stop is hit. "R" is the profit measured in units of the risk originally taken, so +1R means it has made back exactly what it was prepared to lose.</p>
   </section>
 
   <section class="panel" data-panel="performance" hidden>
@@ -354,7 +354,7 @@ Paste this to Claude with what you saw on the page.</pre>
   </section>
 
   <footer>
-    Generated 2026-09-17T23:36:54+00:00 UTC from the agent's own run records.
+    Generated 2026-09-18T18:57:12+00:00 UTC from the agent's own run records.
     Numbers update only when the agent runs; this page does not poll anything.<br>
     A paper account is fake money. Results here are not a prediction of what
     real money would do, and past results do not tell you what comes next.
@@ -377,8 +377,8 @@ Paste this to Claude with what you saw on the page.</pre>
       cache.
 --------------------------------------------------------------------------- */
 (function () {
-  var BUILT = "2026-09-17T23:36:54+00:00";
-  var DATED = "2026-09-17T23:36:54+00:00";
+  var BUILT = "2026-09-18T18:57:12+00:00";
+  var DATED = "2026-09-18T18:57:12+00:00";
 
   function ageParts(iso) {
     if (!iso) return { text: "never run", hrs: 1e9, sev: "warning" };
