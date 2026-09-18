@@ -1,11 +1,11 @@
 {
-  "updated_at": "2026-09-18T18:57:12+00:00",
+  "updated_at": "2026-09-18T23:26:55+00:00",
   "carried_from": null,
-  "last_full_run": "2026-09-17T23:36:54+00:00",
+  "last_full_run": "2026-09-18T23:26:55+00:00",
   "refresh_only": false,
   "mode": "paper",
-  "equity": 99017.04,
+  "equity": 99053.11,
   "positions": 9,
-  "orders": 0,
+  "orders": 1,
   "pending": 0
 }

@@ -1,6 +1,6 @@
 {
-  "updated_at": "2026-09-18T18:57:12+00:00",
-  "last_full_run": "2026-09-17T23:36:54+00:00",
+  "updated_at": "2026-09-18T23:26:55+00:00",
+  "last_full_run": "2026-09-18T23:26:55+00:00",
   "mode": "paper",
   "healthy": true,
   "carried_from": null,
@@ -10,8 +10,8 @@
       "symbol": "AAPL",
       "shares": 56,
       "avg_entry": 327.423929,
-      "market_value": 18800.32,
-      "unrealized_pl": 464.579976,
+      "market_value": 18768.4,
+      "unrealized_pl": 432.659976,
       "stop": 309.11,
       "target": 361.49,
       "stop_shares": 56,
@@ -21,8 +21,8 @@
       "symbol": "ABNB",
       "shares": 71,
       "avg_entry": 167.804789,
-      "market_value": 11857.0,
-      "unrealized_pl": -57.140019,
+      "market_value": 11801.62,
+      "unrealized_pl": -112.520019,
       "stop": 158.13,
       "target": 197.25,
       "stop_shares": 71,
@@ -32,8 +32,8 @@
       "symbol": "ABT",
       "shares": 142,
       "avg_entry": 104.877324,
-      "market_value": 14543.64,
-      "unrealized_pl": -348.940008,
+      "market_value": 14570.62,
+      "unrealized_pl": -321.960008,
       "stop": 98.79,
       "target": 119.14,
       "stop_shares": 142,
@@ -43,8 +43,8 @@
       "symbol": "AMAT",
       "shares": 17,
       "avg_entry": 426.28,
-      "market_value": 7401.885,
-      "unrealized_pl": 155.125,
+      "market_value": 7537.12,
+      "unrealized_pl": 290.36,
       "stop": 367.96,
       "target": 536.7,
       "stop_shares": 17,
@@ -54,8 +54,8 @@
       "symbol": "AMGN",
       "shares": 33,
       "avg_entry": 383.8,
-      "market_value": 12738.495,
-      "unrealized_pl": 73.095,
+      "market_value": 12725.46,
+      "unrealized_pl": 60.06,
       "stop": 353.44,
       "target": 440.53,
       "stop_shares": 33,
@@ -65,8 +65,8 @@
       "symbol": "AMZN",
       "shares": 1,
       "avg_entry": 250.27,
-      "market_value": 254.365,
-      "unrealized_pl": 4.095,
+      "market_value": 254.43,
+      "unrealized_pl": 4.16,
       "stop": 239.74,
       "target": 284.75,
       "stop_shares": 1,
@@ -76,8 +76,8 @@
       "symbol": "APD",
       "shares": 39,
       "avg_entry": 295.0,
-      "market_value": 11083.8,
-      "unrealized_pl": -421.2,
+      "market_value": 11083.02,
+      "unrealized_pl": -421.98,
       "stop": 278.46,
       "target": 324.02,
       "stop_shares": 39,
@@ -87,8 +87,8 @@
       "symbol": "CL",
       "shares": 224,
       "avg_entry": 88.24,
-      "market_value": 19613.44,
-      "unrealized_pl": -152.32,
+      "market_value": 19593.28,
+      "unrealized_pl": -172.48,
       "stop": 84.64,
       "target": 97.66,
       "stop_shares": 224,
@@ -98,17 +98,50 @@
       "symbol": "FCX",
       "shares": 38,
       "avg_entry": 70.153947,
-      "market_value": 2702.37,
-      "unrealized_pl": 36.520014,
+      "market_value": 2698.0,
+      "unrealized_pl": 32.150014,
       "stop": 61.52,
       "target": 85.1,
       "stop_shares": 38,
       "stop_checked": true
     }
   ],
-  "signals": [],
-  "orders": [],
-  "exits": [],
+  "signals": [
+    {
+      "symbol": "ADI",
+      "entry": 375.72,
+      "stop": 357.5194,
+      "target": 412.1212,
+      "shares": 20,
+      "strategy": "pullback",
+      "why": "pullback to the 20 EMA, reclaimed; stop 1.60x ATR below entry"
+    }
+  ],
+  "orders": [
+    {
+      "symbol": "ADI",
+      "shares": 20,
+      "stop": 357.5194,
+      "target": 412.1212,
+      "dollars_at_risk": 364.01,
+      "order_id": "9ffee58f-9a94-49a0-acd8-b00f5837c592",
+      "strategy": "pullback"
+    }
+  ],
+  "exits": [
+    {
+      "symbol": "AMAT",
+      "reason": "bounce complete: closed at $444.57, back above the 10-day average of $442.96",
+      "status": "accepted",
+      "unrealized_pl": 290.36
+    },
+    {
+      "symbol": "AMZN",
+      "reason": "bounce complete: closed at $253.71, back above the 10-day average of $252.94",
+      "status": "accepted",
+      "unrealized_pl": 4.16
+    }
+  ],
   "protected": [],
   "vetoes": [],
   "findings": [],
@@ -197,31 +230,82 @@
     "CL": "reversion",
     "ABNB": "reversion",
     "ABT": "reversion",
-    "AMZN": "reversion",
     "AAPL": "pullback",
     "AMGN": "reversion",
     "APD": "reversion",
-    "AMAT": "reversion",
-    "FCX": "reversion"
+    "FCX": "reversion",
+    "ADI": "pullback"
   },
   "pending": [],
-  "pending_expires_at": "2026-09-18T09:30:00-04:00",
+  "pending_expires_at": "2026-09-21T09:30:00-04:00",
   "config_notes": [],
   "approved_submitted": [],
   "approved_refused": [],
   "account": {
-    "equity": 99017.04,
+    "equity": 99053.11,
     "cash": 21.16,
-    "buying_power": 277273.09,
+    "buying_power": 277374.1,
     "status": "ACTIVE",
     "trading_blocked": false,
     "mode": "PAPER"
   },
-  "skipped_count": 26,
+  "skipped_count": 17,
   "skipped_reasons": [
     {
-      "reason": "no room left: $21 of the 100% exposure cap is unspent",
-      "count": 26
+      "reason": "no room left: $298 of the 100% exposure cap is unspent",
+      "count": 4
+    },
+    {
+      "reason": "risking $17.80",
+      "count": 1
+    },
+    {
+      "reason": "risking $24.09",
+      "count": 1
+    },
+    {
+      "reason": "risking $14.40",
+      "count": 1
+    },
+    {
+      "reason": "risking $15.73",
+      "count": 1
+    },
+    {
+      "reason": "risking $13.56",
+      "count": 1
+    },
+    {
+      "reason": "risking $12.36",
+      "count": 1
+    },
+    {
+      "reason": "risking $12.60",
+      "count": 1
+    },
+    {
+      "reason": "risking $10.64",
+      "count": 1
+    },
+    {
+      "reason": "risking $23.19",
+      "count": 1
+    },
+    {
+      "reason": "risking $10.75",
+      "count": 1
+    },
+    {
+      "reason": "risking $15.75",
+      "count": 1
+    },
+    {
+      "reason": "risking $15.58",
+      "count": 1
+    },
+    {
+      "reason": "risking $8.87",
+      "count": 1
     }
   ]
 }
